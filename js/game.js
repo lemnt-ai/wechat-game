@@ -1,6 +1,6 @@
 /**
  * 欢乐钓鱼 - 微信小游戏
- * 触摸修复版
+ * 完整修复版
  */
 
 export default class Game {
@@ -13,65 +13,133 @@ export default class Game {
     this.width = this.systemInfo.windowWidth
     this.height = this.systemInfo.windowHeight
     
-    console.log('[钓鱼] 尺寸:', this.width, 'x', this.height)
-    
     // 游戏状态
-    this.state = 'menu'
+    this.state = 'menu' // menu, playing, gameover
     this.time = 60
-    this.lastTime = Date.now()
     this.score = 0
     this.caught = 0
     
-    // 鱼钩
+    // 鱼钩 - 固定在顶部中间
     this.hookX = this.width / 2
-    this.hookY = 80
-    this.hookSpeed = 6
+    this.hookY = 60
+    this.hookTargetX = this.width / 2
+    this.hookSpeed = 8
     
     // 鱼线
-    this.lineY = 80
-    this.lineSpeed = 6
-    this.lineState = 'idle'
+    this.lineLength = 0
+    this.maxLineLength = this.height - 100
+    this.lineSpeed = 5
+    this.lineState = 'idle' // idle, dropping, pulling, caught
     
     // 鱼
     this.fishTypes = [
-      { name: '小鱼', color: '#4ECDC4', score: 10, speed: 2, size: 20 },
-      { name: '中鱼', color: '#45B7D1', score: 20, speed: 3, size: 30 },
-      { name: '大鱼', color: '#FF6B6B', score: 30, speed: 1.5, size: 40 },
-      { name: '金鱼', color: '#FFD700', score: 50, speed: 4, size: 25 }
+      { name: '小鱼', color: '#4ECDC4', score: 10, speed: 2, size: 25 },
+      { name: '中鱼', color: '#45B7D1', score: 20, speed: 3, size: 35 },
+      { name: '大鱼', color: '#FF6B6B', score: 30, speed: 1.5, size: 45 },
+      { name: '金鱼', color: '#FFD700', score: 50, speed: 4, size: 30 }
     ]
     
     this.fishes = []
     this.caughtFish = null
-    this.spawnInterval = 1500
-    this.lastSpawn = Date.now()
+    this.spawnTimer = 0
+    this.spawnInterval = 60 // 帧
     
     // 触摸
-    this.isTouching = false
+    this.touchX = 0
+  }
+  
+  // 初始化
+  init() {
+    console.log('[游戏] 初始化')
+    this.bindEvents()
+    this.render()
   }
   
   // 生成鱼
   spawnFish() {
-    const type = this.fishTypes[Math.floor(Math.random() * this.fishTypes.length)]
+    const typeIndex = Math.floor(Math.random() * this.fishTypes.length)
+    const type = this.fishTypes[typeIndex]
     const fromLeft = Math.random() > 0.5
     
-    this.fishes.push({
+    const fish = {
       x: fromLeft ? -50 : this.width + 50,
-      y: 150 + Math.random() * (this.height - 250),
+      y: 120 + Math.random() * (this.height - 200),
       type: type,
       direction: fromLeft ? 1 : -1,
-      caught: false
-    })
+      caught: false,
+      hooked: false
+    }
     
-    console.log('[鱼] 生成:', type.name, '位置:', this.fishes[this.fishes.length-1].x, this.fishes[this.fishes.length-1].y)
+    this.fishes.push(fish)
+    console.log('[鱼] 生成:', type.name)
+  }
+  
+  // 更新
+  update() {
+    if (this.state !== 'playing') return
+    
+    // 时间
+    this.time--
+    if (this.time <= 0) {
+      this.state = 'gameover'
+      console.log('[游戏] 结束! 分数:', this.score)
+      return
+    }
+    
+    // 鱼钩左右移动
+    if (Math.abs(this.hookX - this.hookTargetX) > 1) {
+      this.hookX += (this.hookTargetX > this.hookX) ? this.hookSpeed : -this.hookSpeed
+    }
+    
+    // 鱼线状态
+    if (this.lineState === 'dropping') {
+      this.lineLength += this.lineSpeed
+      if (this.lineLength >= this.maxLineLength) {
+        this.lineState = 'pulling'
+        console.log('[鱼钩] 到达底部')
+      }
+      this.checkCollision()
+    } else if (this.lineState === 'pulling') {
+      this.lineLength -= this.lineSpeed * 1.5
+      if (this.lineLength <= 0) {
+        this.lineLength = 0
+        this.lineState = 'idle'
+        if (this.caughtFish) {
+          this.score += this.caughtFish.type.score
+          this.caught++
+          console.log('[得分] +', this.caughtFish.type.score, '总分:', this.score)
+          this.caughtFish = null
+        }
+      }
+    }
+    
+    // 更新鱼
+    this.updateFishes()
+    
+    // 生成鱼
+    this.spawnTimer++
+    if (this.spawnTimer >= this.spawnInterval) {
+      this.spawnFish()
+      this.spawnTimer = 0
+    }
   }
   
   // 更新鱼
   updateFishes() {
     for (let i = this.fishes.length - 1; i >= 0; i--) {
       const fish = this.fishes[i]
-      if (!fish.caught) {
-        fish.x += fish.type.speed * fish.direction
+      
+      if (fish.caught) {
+        // 被钓起的鱼跟随鱼钩
+        fish.x = this.hookX
+        fish.y = this.hookY + this.lineLength + 30
+        continue
       }
+      
+      // 移动
+      fish.x += fish.type.speed * fish.direction
+      
+      // 移除超出屏幕的
       if ((fish.direction === 1 && fish.x > this.width + 100) ||
           (fish.direction === -1 && fish.x < -100)) {
         this.fishes.splice(i, 1)
@@ -79,43 +147,23 @@ export default class Game {
     }
   }
   
-  // 更新鱼钩
-  updateHook() {
-    if (this.lineState === 'dropping') {
-      this.lineY += this.lineSpeed
-      if (this.lineY >= this.height - 50) {
-        this.lineState = 'pulling'
-        console.log('[鱼钩] 到达底部，开始收回')
-      }
-      this.checkCatch()
-    } else if (this.lineState === 'pulling') {
-      this.lineY -= this.lineSpeed * 1.5
-      if (this.lineY <= this.hookY) {
-        this.lineY = this.hookY
-        this.lineState = 'idle'
-        console.log('[鱼钩] 收回完成')
-        if (this.caughtFish) {
-          this.score += this.caughtFish.type.score
-          this.caught++
-          console.log('[得分]', this.caughtFish.type.score, '总分:', this.score, '钓到:', this.caught)
-          this.caughtFish = null
-        }
-      }
-    }
-  }
-  
-  // 检查钓到鱼
-  checkCatch() {
+  // 检查碰撞
+  checkCollision() {
+    const hookY = this.hookY + this.lineLength
+    
     for (let i = 0; i < this.fishes.length; i++) {
       const fish = this.fishes[i]
-      if (fish.caught) continue
+      if (fish.caught || fish.hooked) continue
       
       const dx = Math.abs(fish.x - this.hookX)
-      const dy = Math.abs(fish.y - this.lineY)
+      const dy = Math.abs(fish.y - hookY)
       
-      if (dx < fish.type.size + 15 && dy < fish.type.size + 15) {
+      if (dx < fish.type.size && dy < fish.type.size + 10) {
+        // 钓到了!
+        fish.hooked = true
         fish.caught = true
         this.caughtFish = fish
+        this.lineState = 'pulling'
         console.log('[钓鱼] 钓到:', fish.type.name)
         break
       }
@@ -124,130 +172,87 @@ export default class Game {
   
   // 绑定事件
   bindEvents() {
-    console.log('[事件] 开始绑定')
+    console.log('[事件] 绑定')
     
     // 触摸开始
     wx.onTouchStart((res) => {
-      console.log('[TouchStart] touches:', res.touches.length)
+      console.log('[TouchStart]')
       
       if (this.state === 'menu') {
-        console.log('[菜单] -> 开始游戏')
+        console.log('[菜单] 开始游戏')
         this.startGame()
         return
       }
       
       if (this.state === 'gameover') {
-        console.log('[结束] -> 重新开始')
+        console.log('[结束] 重新开始')
         this.startGame()
         return
       }
       
-      if (this.state !== 'playing') {
-        console.log('[状态] 不是 playing:', this.state)
-        return
-      }
-      
-      this.isTouching = true
-      
-      // 鱼钩空闲时才能放下
+      // 放下鱼钩
       if (this.lineState === 'idle') {
-        console.log('[钓鱼] -> 放下鱼钩! 位置:', this.hookX)
+        console.log('[钓鱼] 放下鱼钩')
         this.lineState = 'dropping'
-      } else {
-        console.log('[钓鱼] 鱼钩正在:', this.lineState)
       }
     })
     
     // 触摸移动
     wx.onTouchMove((res) => {
-      if (!this.isTouching || this.state !== 'playing') return
-      
       const touch = res.touches[0]
-      const newX = touch.clientX
-      
-      // 直接设置鱼钩位置
-      this.hookX = newX
-      
-      // 限制范围
-      if (this.hookX < 20) this.hookX = 20
-      if (this.hookX > this.width - 20) this.hookX = this.width - 20
+      this.hookTargetX = touch.clientX
+      console.log('[TouchMove] 目标:', this.hookTargetX)
     })
     
     // 触摸结束
-    wx.onTouchEnd((res) => {
+    wx.onTouchEnd(() => {
       console.log('[TouchEnd]')
-      this.isTouching = false
     })
     
-    console.log('[事件] 绑定完成')
+    console.log('[事件] 完成')
   }
   
-  // 更新时间
-  updateTime() {
-    const now = Date.now()
-    if (now - this.lastTime >= 1000) {
-      this.time--
-      this.lastTime = now
-      console.log('[时间] 剩余:', this.time)
-      if (this.time <= 0) {
-        this.state = 'gameover'
-        console.log('[游戏] 结束!')
-      }
-    }
-  }
-  
-  // 开始
+  // 开始游戏
   start() {
     console.log('[游戏] 启动')
     this.state = 'menu'
-    this.bindEvents()
-    this.render()
+    this.init()
   }
   
-  // 开始新游戏
+  // 新游戏
   startGame() {
-    console.log('[游戏] === 新游戏开始 ===')
+    console.log('[游戏] === 新游戏 ===')
     this.state = 'playing'
     this.time = 60
     this.score = 0
     this.caught = 0
     this.fishes = []
     this.caughtFish = null
-    this.lineY = this.hookY
+    this.lineLength = 0
     this.lineState = 'idle'
     this.hookX = this.width / 2
-    this.lastTime = Date.now()
-    this.lastSpawn = Date.now()
-    console.log('[游戏] 状态:', this.state, '时间:', this.time)
+    this.hookTargetX = this.width / 2
+    this.spawnTimer = 0
   }
   
   // 游戏循环
   gameLoop() {
     if (this.state === 'playing') {
-      this.updateTime()
-      this.updateHook()
-      this.updateFishes()
-      
-      const now = Date.now()
-      if (now - this.lastSpawn > this.spawnInterval) {
-        this.spawnFish()
-        this.lastSpawn = now
-      }
-      
+      this.update()
       this.render()
-      requestAnimationFrame(() => this.gameLoop())
     }
+    requestAnimationFrame(() => this.gameLoop())
   }
   
   // 渲染
   render() {
-    if (!this.ctx) {
-      console.warn('[渲染] ctx 为空')
-      return
-    }
+    if (!this.ctx) return
     
-    this.ctx.fillStyle = '#87CEEB'
-    this.ctx.fillRect(0, 0, this.width, this.height)
+    const ctx = this.ctx
+    
+    // 清空
+    ctx.fillStyle = '#87CEEB'
+    ctx.fillRect(0, 0, this.width, this.height)
     
     if (this.state === 'menu') {
       this.renderMenu()
@@ -269,10 +274,9 @@ export default class Game {
     
     ctx.fillStyle = '#fff'
     ctx.font = '18px Arial'
-    ctx.fillText('滑动移动鱼钩', this.width / 2, this.height / 3)
+    ctx.fillText('滑动左右移动', this.width / 2, this.height / 3)
     ctx.fillText('点击放下鱼钩', this.width / 2, this.height / 3 + 35)
     
-    // 开始按钮
     ctx.fillStyle = '#4ECDC4'
     ctx.fillRect(this.width / 2 - 80, this.height / 2, 160, 55)
     ctx.fillStyle = '#fff'
@@ -284,14 +288,14 @@ export default class Game {
   renderGame() {
     const ctx = this.ctx
     
-    // 背景渐变
+    // 背景
     const gradient = ctx.createLinearGradient(0, 0, 0, this.height)
     gradient.addColorStop(0, '#87CEEB')
     gradient.addColorStop(1, '#1E90FF')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, this.width, this.height)
     
-    // 顶部信息
+    // 顶部信息栏
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
     ctx.fillRect(0, 0, this.width, 45)
     
@@ -304,24 +308,28 @@ export default class Game {
     ctx.textAlign = 'right'
     ctx.fillText('钓到:' + this.caught, this.width - 12, 28)
     
+    // 鱼钩支架
+    ctx.fillStyle = '#8B4513'
+    ctx.fillRect(this.hookX - 3, 0, 6, this.hookY)
+    
     // 鱼线
     ctx.strokeStyle = '#fff'
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(this.hookX, this.hookY)
-    ctx.lineTo(this.hookX, this.lineY)
+    ctx.lineTo(this.hookX, this.hookY + this.lineLength)
     ctx.stroke()
     
     // 鱼钩
     ctx.strokeStyle = '#666'
     ctx.lineWidth = 3
     ctx.beginPath()
-    ctx.arc(this.hookX, this.lineY, 12, 0, Math.PI, false)
+    ctx.arc(this.hookX, this.hookY + this.lineLength, 12, 0, Math.PI, false)
     ctx.stroke()
     
     // 钓到的鱼
     if (this.caughtFish) {
-      this.drawFish(this.caughtFish, this.hookX, this.lineY + 25)
+      this.drawFish(this.caughtFish, this.hookX, this.hookY + this.lineLength + 30)
     }
     
     // 所有的鱼
@@ -330,14 +338,6 @@ export default class Game {
         this.drawFish(fish, fish.x, fish.y)
       }
     })
-    
-    // 状态提示
-    if (this.lineState === 'idle') {
-      ctx.fillStyle = 'rgba(255,255,255,0.8)'
-      ctx.font = '14px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText('点击放下鱼钩', this.width / 2, this.height - 20)
-    }
   }
   
   // 绘制鱼
