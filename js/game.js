@@ -30,9 +30,9 @@ export default class Game {
     this.hookTargetX = this.width / 2
     
     // 鱼线
-    this.lineLength = 0
-    this.maxLineLength = this.height - 100
-    this.lineSpeed = 6
+    this.lineLength = 50  // 初始长度
+    this.maxLineLength = this.height - 400  // 最大长度
+    this.lineSpeed = 8
     this.lineState = 'idle'
     
     // 鱼配置
@@ -177,9 +177,11 @@ export default class Game {
     }
   }
   
-  // 检查碰撞（鱼钩位置：底部向上）
+  // 检查碰撞（鱼钩位置：路亚竿梢）
   checkCollision() {
-    const hookY = this.hookY - 20 - this.lineLength
+    // 竿梢位置
+    const tipY = this.hookY - 330
+    const hookY = tipY - this.lineLength
     
     for (let i = 0; i < this.fishes.length; i++) {
       const fish = this.fishes[i]
@@ -423,38 +425,8 @@ export default class Game {
     // 广告按钮（左上角）
     this.renderAdButton()
     
-    // 炮台（底部）
-    ctx.fillStyle = '#8B4513'
-    ctx.fillRect(this.hookX - 20, this.hookY, 40, 60)
-    
-    // 炮台底座
-    ctx.fillStyle = '#654321'
-    ctx.beginPath()
-    ctx.moveTo(this.hookX - 30, this.hookY + 60)
-    ctx.lineTo(this.hookX + 30, this.hookY + 60)
-    ctx.lineTo(this.hookX, this.hookY + 40)
-    ctx.closePath()
-    ctx.fill()
-    
-    // 鱼线（向上）
-    ctx.strokeStyle = '#fff'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(this.hookX, this.hookY - 20)
-    ctx.lineTo(this.hookX, this.hookY - 20 - this.lineLength)
-    ctx.stroke()
-    
-    // 鱼钩
-    ctx.strokeStyle = '#666'
-    ctx.lineWidth = 3
-    ctx.beginPath()
-    ctx.arc(this.hookX, this.hookY - 20 - this.lineLength, 12, 0, Math.PI, true)
-    ctx.stroke()
-    
-    // 钓到的鱼
-    if (this.caughtFish) {
-      this.drawFish(this.caughtFish, this.hookX, this.hookY - 20 - this.lineLength - 30)
-    }
+    // 路亚鱼竿（底部）
+    this.renderFishingRod(ctx)
     
     // 所有的鱼
     this.fishes.forEach(fish => {
@@ -464,7 +436,7 @@ export default class Game {
     })
   }
   
-  // 渲染广告按钮（左上角，避免和炮台冲突）
+  // 渲染广告按钮（左上角）
   renderAdButton() {
     const ctx = this.ctx
     
@@ -484,6 +456,171 @@ export default class Game {
       ctx.font = 'bold 14px Arial'
       ctx.textAlign = 'center'
       ctx.fillText('+30 秒', 55, 78)
+    }
+  }
+  
+  // 渲染路亚鱼竿
+  renderFishingRod(ctx) {
+    const rodX = this.hookX
+    const rodY = this.hookY
+    
+    // 鱼竿角度（根据鱼线状态微调）
+    let rodAngle = 0
+    if (this.lineState === 'dropping') {
+      rodAngle = -0.1 // 抛竿时略微向下
+    } else if (this.lineState === 'pulling' && this.caughtFish) {
+      rodAngle = 0.15 // 中鱼时弯曲
+    }
+    
+    // 1. 鱼线轮（卷线器）
+    const reelX = rodX - 15
+    const reelY = rodY - 30
+    
+    // 线轮主体
+    ctx.fillStyle = '#C0C0C0'
+    ctx.beginPath()
+    ctx.arc(reelX, reelY, 18, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 线轮中心
+    ctx.fillStyle = '#606060'
+    ctx.beginPath()
+    ctx.arc(reelX, reelY, 8, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 线轮摇把
+    ctx.strokeStyle = '#404040'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.moveTo(reelX - 5, reelY)
+    ctx.lineTo(reelX + 15, reelY)
+    ctx.stroke()
+    
+    ctx.fillStyle = '#8B4513'
+    ctx.beginPath()
+    ctx.arc(reelX + 18, reelY, 5, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 2. 鱼竿握把
+    const gripGradient = ctx.createLinearGradient(rodX - 20, rodY - 80, rodX + 20, rodY)
+    gripGradient.addColorStop(0, '#2C2C2C')
+    gripGradient.addColorStop(1, '#1A1A1A')
+    
+    ctx.fillStyle = gripGradient
+    ctx.beginPath()
+    ctx.moveTo(rodX - 12, rodY - 80)
+    ctx.lineTo(rodX + 12, rodY - 80)
+    ctx.lineTo(rodX + 15, rodY)
+    ctx.lineTo(rodX - 15, rodY)
+    ctx.closePath()
+    ctx.fill()
+    
+    // 握把纹理
+    ctx.strokeStyle = '#3A3A3A'
+    ctx.lineWidth = 2
+    for (let i = 0; i < 8; i++) {
+      const y = rodY - 70 - i * 9
+      ctx.beginPath()
+      ctx.moveTo(rodX - 11, y)
+      ctx.lineTo(rodX + 11, y)
+      ctx.stroke()
+    }
+    
+    // 3. 鱼竿竿身（路亚竿 - 细长）
+    ctx.save()
+    ctx.translate(rodX, rodY - 80)
+    ctx.rotate(rodAngle)
+    
+    // 竿身渐变（碳素材质）
+    const rodGradient = ctx.createLinearGradient(0, 0, 0, -200)
+    rodGradient.addColorStop(0, '#1A1A2E')
+    rodGradient.addColorStop(0.5, '#16213E')
+    rodGradient.addColorStop(1, '#0F3460')
+    
+    ctx.strokeStyle = rodGradient
+    ctx.lineWidth = 6
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.quadraticCurveTo(5, -100, 10, -200) // 略微弯曲
+    ctx.stroke()
+    
+    // 竿梢（更细）
+    ctx.strokeStyle = '#E94560'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(10, -200)
+    ctx.quadraticCurveTo(12, -230, 15, -250)
+    ctx.stroke()
+    
+    // 导环（鱼线通过的小环）
+    ctx.strokeStyle = '#C0C0C0'
+    ctx.lineWidth = 2
+    for (let i = 1; i <= 5; i++) {
+      const guideY = -50 - i * 40
+      const guideX = 2 + i * 2
+      ctx.beginPath()
+      ctx.arc(guideX, guideY, 3, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    
+    ctx.restore()
+    
+    // 4. 鱼线（从竿梢伸出）
+    const tipX = rodX + 15
+    const tipY = rodY - 330
+    
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(tipX, tipY)
+    
+    // 鱼线弧度（根据状态）
+    if (this.lineState === 'dropping') {
+      // 抛竿时鱼线松弛
+      ctx.quadraticCurveTo(
+        tipX + 20, tipY - this.lineLength / 2,
+        this.hookX, tipY - this.lineLength
+      )
+    } else if (this.lineState === 'pulling') {
+      // 收线时鱼线绷紧
+      ctx.lineTo(this.hookX, tipY - this.lineLength)
+    } else {
+      // 空闲时自然下垂
+      ctx.quadraticCurveTo(
+        tipX + 10, tipY - 30,
+        this.hookX, tipY - 50
+      )
+    }
+    ctx.stroke()
+    
+    // 5. 鱼钩和鱼
+    const hookY = tipY - this.lineLength
+    
+    // 鱼钩
+    ctx.strokeStyle = '#666'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(this.hookX, hookY, 8, 0, Math.PI, true)
+    ctx.stroke()
+    
+    // 假饵（路亚饵）
+    ctx.fillStyle = '#FF6B6B'
+    ctx.beginPath()
+    ctx.ellipse(this.hookX, hookY + 10, 8, 4, 0, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 假饵尾部的羽毛
+    ctx.fillStyle = '#FFD700'
+    ctx.beginPath()
+    ctx.moveTo(this.hookX - 5, hookY + 12)
+    ctx.lineTo(this.hookX, hookY + 20)
+    ctx.lineTo(this.hookX + 5, hookY + 12)
+    ctx.closePath()
+    ctx.fill()
+    
+    // 钓到的鱼
+    if (this.caughtFish) {
+      this.drawFish(this.caughtFish, this.hookX, hookY + 35)
     }
   }
   
