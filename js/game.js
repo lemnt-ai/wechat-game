@@ -30,8 +30,8 @@ export default class Game {
     this.hookTargetX = this.width / 2
     
     // 鱼线
-    this.lineLength = 50  // 初始长度
-    this.maxLineLength = this.height - 400  // 最大长度
+    this.lineLength = 30  // 初始长度
+    this.maxLineLength = 350  // 最大长度（缩短）
     this.lineSpeed = 8
     this.lineState = 'idle'
     
@@ -66,7 +66,7 @@ export default class Game {
     this.render()
   }
   
-  // 生成鱼（鱼在水面区域：顶部）
+  // 生成鱼（鱼在水面区域：顶部 1/3 区域）
   spawnFish() {
     const rand = Math.random()
     let typeIndex
@@ -81,7 +81,7 @@ export default class Game {
     
     const fish = {
       x: fromLeft ? -50 : this.width + 50,
-      y: 100 + Math.random() * (this.height - 300),  // 鱼在顶部水面区域
+      y: 80 + Math.random() * (this.height * 0.35),  // 鱼在顶部 35% 区域
       type: type,
       direction: fromLeft ? 1 : -1,
       caught: false,
@@ -394,13 +394,24 @@ export default class Game {
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, this.width, this.height)
     
-    // 水面线
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+    // 水面线（顶部 1/3 处）
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(0, this.height * 0.5)
-    ctx.lineTo(this.width, this.height * 0.5)
+    ctx.moveTo(0, this.height * 0.35)
+    ctx.lineTo(this.width, this.height * 0.35)
     ctx.stroke()
+    
+    // 水波纹
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+    ctx.lineWidth = 1
+    for (let i = 0; i < 3; i++) {
+      const y = this.height * 0.35 + 15 + i * 10
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(this.width, y)
+      ctx.stroke()
+    }
     
     // 顶部信息栏
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
@@ -459,7 +470,7 @@ export default class Game {
     }
   }
   
-  // 渲染路亚鱼竿
+  // 渲染路亚鱼竿（缩短版）
   renderFishingRod(ctx) {
     const rodX = this.hookX
     const rodY = this.hookY
@@ -467,107 +478,107 @@ export default class Game {
     // 鱼竿角度（根据鱼线状态微调）
     let rodAngle = 0
     if (this.lineState === 'dropping') {
-      rodAngle = -0.1 // 抛竿时略微向下
+      rodAngle = -0.15 // 抛竿时略微向下
     } else if (this.lineState === 'pulling' && this.caughtFish) {
-      rodAngle = 0.15 // 中鱼时弯曲
+      rodAngle = 0.2 // 中鱼时弯曲
     }
     
     // 1. 鱼线轮（卷线器）
-    const reelX = rodX - 15
-    const reelY = rodY - 30
+    const reelX = rodX - 12
+    const reelY = rodY - 25
     
     // 线轮主体
     ctx.fillStyle = '#C0C0C0'
     ctx.beginPath()
-    ctx.arc(reelX, reelY, 18, 0, Math.PI * 2)
+    ctx.arc(reelX, reelY, 14, 0, Math.PI * 2)
     ctx.fill()
     
     // 线轮中心
     ctx.fillStyle = '#606060'
     ctx.beginPath()
-    ctx.arc(reelX, reelY, 8, 0, Math.PI * 2)
+    ctx.arc(reelX, reelY, 6, 0, Math.PI * 2)
     ctx.fill()
     
     // 线轮摇把
     ctx.strokeStyle = '#404040'
-    ctx.lineWidth = 4
+    ctx.lineWidth = 3
     ctx.beginPath()
-    ctx.moveTo(reelX - 5, reelY)
-    ctx.lineTo(reelX + 15, reelY)
+    ctx.moveTo(reelX - 4, reelY)
+    ctx.lineTo(reelX + 12, reelY)
     ctx.stroke()
     
     ctx.fillStyle = '#8B4513'
     ctx.beginPath()
-    ctx.arc(reelX + 18, reelY, 5, 0, Math.PI * 2)
+    ctx.arc(reelX + 14, reelY, 4, 0, Math.PI * 2)
     ctx.fill()
     
-    // 2. 鱼竿握把
-    const gripGradient = ctx.createLinearGradient(rodX - 20, rodY - 80, rodX + 20, rodY)
+    // 2. 鱼竿握把（缩短）
+    const gripGradient = ctx.createLinearGradient(rodX - 10, rodY - 50, rodX + 10, rodY)
     gripGradient.addColorStop(0, '#2C2C2C')
     gripGradient.addColorStop(1, '#1A1A1A')
     
     ctx.fillStyle = gripGradient
     ctx.beginPath()
-    ctx.moveTo(rodX - 12, rodY - 80)
-    ctx.lineTo(rodX + 12, rodY - 80)
-    ctx.lineTo(rodX + 15, rodY)
-    ctx.lineTo(rodX - 15, rodY)
+    ctx.moveTo(rodX - 10, rodY - 50)
+    ctx.lineTo(rodX + 10, rodY - 50)
+    ctx.lineTo(rodX + 12, rodY)
+    ctx.lineTo(rodX - 12, rodY)
     ctx.closePath()
     ctx.fill()
     
-    // 握把纹理
+    // 握把纹理（缩短）
     ctx.strokeStyle = '#3A3A3A'
     ctx.lineWidth = 2
-    for (let i = 0; i < 8; i++) {
-      const y = rodY - 70 - i * 9
+    for (let i = 0; i < 5; i++) {
+      const y = rodY - 45 - i * 8
       ctx.beginPath()
-      ctx.moveTo(rodX - 11, y)
-      ctx.lineTo(rodX + 11, y)
+      ctx.moveTo(rodX - 9, y)
+      ctx.lineTo(rodX + 9, y)
       ctx.stroke()
     }
     
-    // 3. 鱼竿竿身（路亚竿 - 细长）
+    // 3. 鱼竿竿身（缩短版）
     ctx.save()
-    ctx.translate(rodX, rodY - 80)
+    ctx.translate(rodX, rodY - 50)
     ctx.rotate(rodAngle)
     
     // 竿身渐变（碳素材质）
-    const rodGradient = ctx.createLinearGradient(0, 0, 0, -200)
+    const rodGradient = ctx.createLinearGradient(0, 0, 0, -120)
     rodGradient.addColorStop(0, '#1A1A2E')
     rodGradient.addColorStop(0.5, '#16213E')
     rodGradient.addColorStop(1, '#0F3460')
     
     ctx.strokeStyle = rodGradient
-    ctx.lineWidth = 6
+    ctx.lineWidth = 5
     ctx.beginPath()
     ctx.moveTo(0, 0)
-    ctx.quadraticCurveTo(5, -100, 10, -200) // 略微弯曲
+    ctx.quadraticCurveTo(3, -60, 8, -120) // 略微弯曲
     ctx.stroke()
     
-    // 竿梢（更细）
+    // 竿梢（更细更短）
     ctx.strokeStyle = '#E94560'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(10, -200)
-    ctx.quadraticCurveTo(12, -230, 15, -250)
+    ctx.moveTo(8, -120)
+    ctx.quadraticCurveTo(10, -140, 12, -150)
     ctx.stroke()
     
-    // 导环（鱼线通过的小环）
+    // 导环（3 个就够了）
     ctx.strokeStyle = '#C0C0C0'
     ctx.lineWidth = 2
-    for (let i = 1; i <= 5; i++) {
-      const guideY = -50 - i * 40
-      const guideX = 2 + i * 2
+    for (let i = 1; i <= 3; i++) {
+      const guideY = -30 - i * 30
+      const guideX = 2 + i * 1.5
       ctx.beginPath()
-      ctx.arc(guideX, guideY, 3, 0, Math.PI * 2)
+      ctx.arc(guideX, guideY, 2.5, 0, Math.PI * 2)
       ctx.stroke()
     }
     
     ctx.restore()
     
-    // 4. 鱼线（从竿梢伸出）
-    const tipX = rodX + 15
-    const tipY = rodY - 330
+    // 4. 鱼线（从竿梢伸出 - 缩短）
+    const tipX = rodX + 12
+    const tipY = rodY - 200
     
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'
     ctx.lineWidth = 1
@@ -578,7 +589,7 @@ export default class Game {
     if (this.lineState === 'dropping') {
       // 抛竿时鱼线松弛
       ctx.quadraticCurveTo(
-        tipX + 20, tipY - this.lineLength / 2,
+        tipX + 15, tipY - this.lineLength / 2,
         this.hookX, tipY - this.lineLength
       )
     } else if (this.lineState === 'pulling') {
@@ -587,8 +598,8 @@ export default class Game {
     } else {
       // 空闲时自然下垂
       ctx.quadraticCurveTo(
-        tipX + 10, tipY - 30,
-        this.hookX, tipY - 50
+        tipX + 8, tipY - 20,
+        this.hookX, tipY - 40
       )
     }
     ctx.stroke()
@@ -600,27 +611,27 @@ export default class Game {
     ctx.strokeStyle = '#666'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.arc(this.hookX, hookY, 8, 0, Math.PI, true)
+    ctx.arc(this.hookX, hookY, 6, 0, Math.PI, true)
     ctx.stroke()
     
     // 假饵（路亚饵）
     ctx.fillStyle = '#FF6B6B'
     ctx.beginPath()
-    ctx.ellipse(this.hookX, hookY + 10, 8, 4, 0, 0, Math.PI * 2)
+    ctx.ellipse(this.hookX, hookY + 8, 6, 3, 0, 0, Math.PI * 2)
     ctx.fill()
     
     // 假饵尾部的羽毛
     ctx.fillStyle = '#FFD700'
     ctx.beginPath()
-    ctx.moveTo(this.hookX - 5, hookY + 12)
-    ctx.lineTo(this.hookX, hookY + 20)
-    ctx.lineTo(this.hookX + 5, hookY + 12)
+    ctx.moveTo(this.hookX - 4, hookY + 10)
+    ctx.lineTo(this.hookX, hookY + 16)
+    ctx.lineTo(this.hookX + 4, hookY + 10)
     ctx.closePath()
     ctx.fill()
     
     // 钓到的鱼
     if (this.caughtFish) {
-      this.drawFish(this.caughtFish, this.hookX, hookY + 35)
+      this.drawFish(this.caughtFish, this.hookX, hookY + 25)
     }
   }
   
