@@ -1,5 +1,6 @@
 /**
  * 游戏核心逻辑 - 开心消消乐
+ * 滑动模式版本
  */
 
 export default class Game {
@@ -10,47 +11,41 @@ export default class Game {
     
     // 获取系统信息
     this.systemInfo = wx.getSystemInfoSync()
-    console.log('游戏初始化 - 系统信息:', {
-      windowWidth: this.systemInfo.windowWidth,
-      windowHeight: this.systemInfo.windowHeight
-    })
     
     // 屏幕尺寸
-    this.width = this.canvas ? this.canvas.width : this.systemInfo.windowWidth
-    this.height = this.canvas ? this.canvas.height : this.systemInfo.windowHeight
+    this.width = this.systemInfo.windowWidth
+    this.height = this.systemInfo.windowHeight
     
-    console.log('游戏尺寸:', this.width, this.height)
+    console.log('[游戏] 尺寸:', this.width, 'x', this.height)
     
     // 游戏状态
-    this.state = 'menu' // menu, playing, paused, gameover
+    this.state = 'menu'
     this.score = 0
-    this.level = 1
     this.moves = 20
     
     // 网格配置
-    this.gridSize = 8
-    this.cellSize = Math.min(this.width, this.height) / this.gridSize
+    this.gridSize = 6
+    this.cellSize = Math.min(this.width, this.height) / this.gridSize * 0.9
     this.offsetX = (this.width - this.cellSize * this.gridSize) / 2
-    this.offsetY = (this.height - this.cellSize * this.gridSize) / 2 + 50
+    this.offsetY = (this.height - this.cellSize * this.gridSize) / 2 + 30
     
     // 宝石颜色
     this.gemColors = [
-      '#FF6B6B', // 红
-      '#4ECDC4', // 青
-      '#45B7D1', // 蓝
-      '#96CEB4', // 绿
-      '#FFEAA7', // 黄
-      '#DDA0DD'  // 紫
+      '#FF6B6B',
+      '#4ECDC4', 
+      '#45B7D1',
+      '#96CEB4',
+      '#FFEAA7',
+      '#DDA0DD'
     ]
     
-    // 网格数据
     this.grid = []
-    
-    // 选中状态
     this.selectedCell = null
+    this.isProcessing = false
     
-    // 触摸起始位置
-    this.touchStartPos = null
+    // 滑动相关
+    this.touchStart = null
+    this.minSwipeDistance = 30 // 最小滑动距离
   }
   
   // 初始化网格
@@ -59,25 +54,14 @@ export default class Game {
     for (let i = 0; i < this.gridSize; i++) {
       this.grid[i] = []
       for (let j = 0; j < this.gridSize; j++) {
-        this.grid[i][j] = Math.floor(Math.random() * this.gemColors.length)
-      }
-    }
-    // 消除初始匹配
-    this.removeInitialMatches()
-  }
-  
-  // 移除初始匹配
-  removeInitialMatches() {
-    let hasMatch = true
-    while (hasMatch) {
-      hasMatch = false
-      for (let i = 0; i < this.gridSize; i++) {
-        for (let j = 0; j < this.gridSize; j++) {
-          if (this.checkMatch(i, j)) {
-            this.grid[i][j] = Math.floor(Math.random() * this.gemColors.length)
-            hasMatch = true
-          }
-        }
+        let color
+        do {
+          color = Math.floor(Math.random() * this.gemColors.length)
+        } while (
+          (i >= 2 && this.grid[i-1][j] === color && this.grid[i-2][j] === color) ||
+          (j >= 2 && this.grid[i][j-1] === color && this.grid[i][j-2] === color)
+        )
+        this.grid[i][j] = color
       }
     }
   }
@@ -86,124 +70,211 @@ export default class Game {
   checkMatch(row, col) {
     const color = this.grid[row][col]
     
-    // 横向检查
-    if (col >= 2) {
-      if (this.grid[row][col-1] === color && this.grid[row][col-2] === color) {
-        return true
-      }
+    // 横向
+    if (col >= 2 && this.grid[row][col-1] === color && this.grid[row][col-2] === color) {
+      return true
     }
-    
-    // 纵向检查
-    if (row >= 2) {
-      if (this.grid[row-1][col] === color && this.grid[row-2][col] === color) {
-        return true
-      }
+    // 纵向
+    if (row >= 2 && this.grid[row-1][col] === color && this.grid[row-2][col] === color) {
+      return true
     }
     
     return false
   }
   
-  // 绑定触摸事件
+  // 绑定事件
   bindEvents() {
-    console.log('绑定事件...')
+    console.log('[事件] 开始绑定')
     
-    // 处理点击/触摸
-    const handleInput = (x, y) => {
-      console.log('=== 输入事件 ===')
-      console.log('点击坐标:', x, y)
-      console.log('游戏区域:', this.offsetX, this.offsetY, this.cellSize)
-      
-      if (this.state !== 'playing') {
-        console.log('当前状态:', this.state)
-        if (this.state === 'menu') {
-          console.log('开始游戏!')
-          this.startGame()
-        } else if (this.state === 'gameover') {
-          this.adManager.showRewardedAd()
-        }
-        return
-      }
-      
-      const col = Math.floor((x - this.offsetX) / this.cellSize)
-      const row = Math.floor((y - this.offsetY) / this.cellSize)
-      
-      console.log('计算网格位置:', row, col)
-      console.log('当前选中:', this.selectedCell)
-      
-      if (row >= 0 && row < this.gridSize && col >= 0 && col < this.gridSize) {
-        console.log('有效网格位置')
-        if (this.selectedCell) {
-          console.log('尝试交换:', this.selectedCell, '->', { row, col })
-          this.trySwap(this.selectedCell, { row, col })
-          this.selectedCell = null
-        } else {
-          console.log('选中:', { row, col })
-          this.selectedCell = { row, col }
-        }
-        this.render()
-      } else {
-        console.log('无效位置，清空选中')
-        this.selectedCell = null
-        this.render()
-      }
-    }
-    
-    // 触摸事件
+    // 触摸开始 - 记录起始位置
     wx.onTouchStart((res) => {
       const touch = res.touches[0]
-      handleInput(touch.clientX, touch.clientY)
+      this.touchStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now()
+      }
+      console.log('[滑动] 开始:', this.touchStart.x, this.touchStart.y)
     })
     
-    // 鼠标事件（开发者工具支持）
-    if (this.canvas && typeof this.canvas.addEventListener === 'function') {
-      this.canvas.addEventListener('mousedown', (e) => {
-        console.log('鼠标点击事件')
-        handleInput(e.clientX, e.clientY)
-      })
-    }
+    // 触摸结束 - 检测滑动
+    wx.onTouchEnd((res) => {
+      if (!this.touchStart) return
+      
+      const touch = res.changedTouches[0]
+      const deltaX = touch.clientX - this.touchStart.x
+      const deltaY = touch.clientY - this.touchStart.y
+      const deltaTime = Date.now() - this.touchStart.time
+      
+      console.log('[滑动] 结束:', touch.clientX, touch.clientY)
+      console.log('[滑动] 距离:', deltaX, deltaY, '时间:', deltaTime)
+      
+      // 判断是点击还是滑动
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+      
+      if (distance < this.minSwipeDistance) {
+        // 点击 - 处理点击逻辑
+        this.handleTap(this.touchStart.x, this.touchStart.y)
+      } else {
+        // 滑动 - 处理滑动逻辑
+        this.handleSwipe(deltaX, deltaY)
+      }
+      
+      this.touchStart = null
+    })
     
-    console.log('事件绑定完成')
+    console.log('[事件] 绑定完成')
   }
   
-  // 尝试交换
-  trySwap(cell1, cell2) {
-    console.log('=== 尝试交换 ===')
-    const dr = Math.abs(cell1.row - cell2.row)
-    const dc = Math.abs(cell1.col - cell2.col)
+  // 处理点击
+  handleTap(x, y) {
+    console.log('[点击] 坐标:', x, y)
     
-    console.log('距离:', dr, dc)
+    if (this.isProcessing) {
+      console.log('[点击] 处理中，忽略')
+      return
+    }
     
-    // 必须相邻
-    if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
-      // 交换
-      const val1 = this.grid[cell1.row][cell1.col]
-      const val2 = this.grid[cell2.row][cell2.col]
-      console.log('交换前:', val1, '<->', val2)
-      
-      this.grid[cell1.row][cell1.col] = val2
-      this.grid[cell2.row][cell2.col] = val1
-      
-      // 检查是否有匹配
-      const match1 = this.checkMatch(cell1.row, cell1.col)
-      const match2 = this.checkMatch(cell2.row, cell2.col)
-      const hasMatch = match1 || match2
-      
-      console.log('匹配检查:', match1, match2, '结果:', hasMatch)
-      
-      if (hasMatch) {
-        console.log('消除！步数:', this.moves)
-        this.moves--
-        this.processMatches()
-        this.checkGameState()
-      } else {
-        console.log('无匹配，换回来')
-        // 换回来
-        this.grid[cell1.row][cell1.col] = val1
-        this.grid[cell2.row][cell2.col] = val2
-      }
+    // 菜单状态 - 点击开始
+    if (this.state === 'menu') {
+      console.log('[点击] 开始游戏')
+      this.startGame()
+      return
+    }
+    
+    // 游戏结束 - 看广告
+    if (this.state === 'gameover') {
+      console.log('[点击] 游戏结束')
+      this.adManager.showRewardedAd()
+      return
+    }
+    
+    // 计算点击的网格位置
+    const col = Math.floor((x - this.offsetX) / this.cellSize)
+    const row = Math.floor((y - this.offsetY) / this.cellSize)
+    
+    console.log('[点击] 网格:', row, col)
+    
+    // 检查是否在有效范围内
+    if (row < 0 || row >= this.gridSize || col < 0 || col >= this.gridSize) {
+      this.selectedCell = null
+      this.render()
+      return
+    }
+    
+    // 第一次点击 - 选中
+    if (!this.selectedCell) {
+      console.log('[点击] 选中:', row, col)
+      this.selectedCell = { row, col }
       this.render()
     } else {
-      console.log('不相邻，取消选中')
+      // 第二次点击 - 尝试交换
+      const dr = Math.abs(this.selectedCell.row - row)
+      const dc = Math.abs(this.selectedCell.col - col)
+      
+      console.log('[点击] 尝试交换:', this.selectedCell, '->', { row, col })
+      
+      // 必须是相邻的
+      if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
+        this.swapAndCheck(this.selectedCell, { row, col })
+      } else {
+        // 不是相邻的，更新选中
+        this.selectedCell = { row, col }
+        this.render()
+      }
+    }
+  }
+  
+  // 处理滑动
+  handleSwipe(deltaX, deltaY) {
+    console.log('[滑动] 方向检测:', deltaX, deltaY)
+    
+    if (this.isProcessing) {
+      console.log('[滑动] 处理中，忽略')
+      return
+    }
+    
+    if (this.state !== 'playing') {
+      return
+    }
+    
+    // 如果没有选中，先选中第一个
+    if (!this.selectedCell) {
+      console.log('[滑动] 未选中，忽略')
+      return
+    }
+    
+    // 判断滑动方向
+    let targetCell = null
+    
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      // 水平滑动
+      if (deltaX > 0) {
+        // 向右
+        targetCell = { row: this.selectedCell.row, col: this.selectedCell.col + 1 }
+        console.log('[滑动] 向右')
+      } else {
+        // 向左
+        targetCell = { row: this.selectedCell.row, col: this.selectedCell.col - 1 }
+        console.log('[滑动] 向左')
+      }
+    } else {
+      // 垂直滑动
+      if (deltaY > 0) {
+        // 向下
+        targetCell = { row: this.selectedCell.row + 1, col: this.selectedCell.col }
+        console.log('[滑动] 向下')
+      } else {
+        // 向上
+        targetCell = { row: this.selectedCell.row - 1, col: this.selectedCell.col }
+        console.log('[滑动] 向上')
+      }
+    }
+    
+    // 检查目标位置是否有效
+    if (targetCell && 
+        targetCell.row >= 0 && targetCell.row < this.gridSize &&
+        targetCell.col >= 0 && targetCell.col < this.gridSize) {
+      console.log('[滑动] 目标:', targetCell)
+      this.swapAndCheck(this.selectedCell, targetCell)
+    } else {
+      console.log('[滑动] 目标无效')
+    }
+  }
+  
+  // 交换并检查
+  swapAndCheck(cell1, cell2) {
+    console.log('[交换] 开始')
+    
+    const val1 = this.grid[cell1.row][cell1.col]
+    const val2 = this.grid[cell2.row][cell2.col]
+    
+    // 交换
+    this.grid[cell1.row][cell1.col] = val2
+    this.grid[cell2.row][cell2.col] = val1
+    
+    // 检查匹配
+    const match1 = this.checkMatch(cell1.row, cell1.col)
+    const match2 = this.checkMatch(cell2.row, cell2.col)
+    
+    console.log('[交换] 匹配:', match1, match2)
+    
+    if (match1 || match2) {
+      // 有匹配，消除
+      console.log('[交换] 消除!')
+      this.moves--
+      this.isProcessing = true
+      this.selectedCell = null
+      this.render()
+      
+      setTimeout(() => {
+        this.processMatches()
+      }, 100)
+    } else {
+      // 无匹配，换回来
+      console.log('[交换] 无匹配，还原')
+      this.grid[cell1.row][cell1.col] = val1
+      this.grid[cell2.row][cell2.col] = val2
       this.selectedCell = null
       this.render()
     }
@@ -211,42 +282,48 @@ export default class Game {
   
   // 处理匹配
   processMatches() {
-    console.log('=== 处理匹配 ===')
-    let matched = []
+    console.log('[消除] 开始')
+    
+    const matched = []
     
     // 查找所有匹配
     for (let i = 0; i < this.gridSize; i++) {
       for (let j = 0; j < this.gridSize; j++) {
         if (this.checkMatch(i, j)) {
-          console.log('找到匹配:', i, j, '颜色:', this.grid[i][j])
           matched.push({ row: i, col: j })
         }
       }
     }
     
-    console.log('匹配数量:', matched.length)
+    console.log('[消除] 数量:', matched.length)
     
-    if (matched.length > 0) {
-      // 计分
-      this.score += matched.length * 10
-      if (matched.length > 3) {
-        this.score += (matched.length - 3) * 20
-      }
-      console.log('当前分数:', this.score)
-      
-      // 消除并下落
-      this.clearAndDrop(matched)
+    if (matched.length === 0) {
+      this.isProcessing = false
+      this.checkGameState()
+      return
     }
-  }
-  
-  // 清除并下落
-  clearAndDrop(matched) {
-    // 清除
+    
+    // 计分
+    this.score += matched.length * 10
+    
+    // 消除
     matched.forEach(({ row, col }) => {
       this.grid[row][col] = -1
     })
     
     // 下落
+    this.dropGems()
+    
+    this.render()
+    
+    // 连锁反应
+    setTimeout(() => {
+      this.processMatches()
+    }, 300)
+  }
+  
+  // 宝石下落
+  dropGems() {
     for (let col = 0; col < this.gridSize; col++) {
       let writeRow = this.gridSize - 1
       for (let row = this.gridSize - 1; row >= 0; row--) {
@@ -255,17 +332,12 @@ export default class Game {
           writeRow--
         }
       }
-      // 填充新宝石
       while (writeRow >= 0) {
         this.grid[writeRow][col] = Math.floor(Math.random() * this.gemColors.length)
         writeRow--
       }
     }
-    
-    // 连锁反应
-    setTimeout(() => {
-      this.processMatches()
-    }, 200)
+    this.render()
   }
   
   // 检查游戏状态
@@ -273,26 +345,28 @@ export default class Game {
     if (this.moves <= 0) {
       this.state = 'gameover'
     }
+    this.isProcessing = false
+    this.render()
   }
   
   // 开始游戏
   start() {
-    console.log('游戏启动...')
+    console.log('[游戏] 启动')
     this.state = 'menu'
     this.bindEvents()
     this.render()
   }
   
-  // 开始游戏（从菜单）
+  // 开始新游戏
   startGame() {
-    console.log('开始新游戏')
+    console.log('[游戏] 新游戏')
     this.state = 'playing'
     this.score = 0
-    this.level = 1
     this.moves = 20
+    this.isProcessing = false
+    this.selectedCell = null
     this.initGrid()
     this.render()
-    this.gameLoop()
   }
   
   // 游戏循环
@@ -306,11 +380,11 @@ export default class Game {
   // 渲染
   render() {
     if (!this.ctx) {
-      console.warn('Canvas 上下文为空，无法渲染')
+      console.warn('[渲染] ctx 为空')
       return
     }
     
-    // 清空画布
+    // 清空
     this.ctx.fillStyle = '#1a1a2e'
     this.ctx.fillRect(0, 0, this.width, this.height)
     
@@ -325,42 +399,39 @@ export default class Game {
   
   // 渲染菜单
   renderMenu() {
-    console.log('渲染菜单...')
-    
     this.ctx.fillStyle = '#fff'
-    this.ctx.font = 'bold 48px Arial'
+    this.ctx.font = 'bold 36px Arial'
     this.ctx.textAlign = 'center'
     this.ctx.fillText('开心消消乐', this.width / 2, this.height / 3)
     
-    this.ctx.font = '24px Arial'
-    this.ctx.fillText('点击屏幕开始', this.width / 2, this.height / 2)
+    this.ctx.font = '20px Arial'
+    this.ctx.fillText('滑动宝石进行交换', this.width / 2, this.height / 2 - 20)
+    this.ctx.fillText('点击屏幕开始', this.width / 2, this.height / 2 + 20)
     
     // 开始按钮
     this.ctx.fillStyle = '#4ECDC4'
-    this.ctx.fillRect(this.width / 2 - 100, this.height / 2 + 50, 200, 60)
+    this.ctx.fillRect(this.width / 2 - 80, this.height / 2 + 50, 160, 50)
     this.ctx.fillStyle = '#fff'
-    this.ctx.fillText('开始游戏', this.width / 2, this.height / 2 + 90)
-    
-    console.log('菜单渲染完成')
+    this.ctx.fillText('开始游戏', this.width / 2, this.height / 2 + 82)
   }
   
   // 渲染游戏
   renderGame() {
-    // 绘制信息栏
+    // 分数和步数
     this.ctx.fillStyle = '#fff'
-    this.ctx.font = '20px Arial'
+    this.ctx.font = '18px Arial'
     this.ctx.textAlign = 'left'
-    this.ctx.fillText(`分数：${this.score}`, 20, 40)
+    this.ctx.fillText('分数:' + this.score, 15, 30)
     this.ctx.textAlign = 'right'
-    this.ctx.fillText(`步数：${this.moves}`, this.width - 20, 40)
+    this.ctx.fillText('步数:' + this.moves, this.width - 15, 30)
     
-    // 绘制网格背景
+    // 网格背景
     this.ctx.fillStyle = '#16213e'
     this.ctx.fillRect(
-      this.offsetX - 5,
-      this.offsetY - 5,
-      this.cellSize * this.gridSize + 10,
-      this.cellSize * this.gridSize + 10
+      this.offsetX - 3,
+      this.offsetY - 3,
+      this.cellSize * this.gridSize + 6,
+      this.cellSize * this.gridSize + 6
     )
     
     // 绘制宝石
@@ -368,27 +439,28 @@ export default class Game {
       for (let j = 0; j < this.gridSize; j++) {
         const x = this.offsetX + j * this.cellSize
         const y = this.offsetY + i * this.cellSize
+        const color = this.grid[i][j]
         
-        if (this.grid[i][j] >= 0) {
+        if (color >= 0) {
           // 宝石
-          this.ctx.fillStyle = this.gemColors[this.grid[i][j]]
+          this.ctx.fillStyle = this.gemColors[color]
           this.ctx.beginPath()
           this.ctx.arc(
             x + this.cellSize / 2,
             y + this.cellSize / 2,
-            this.cellSize / 2 - 5,
+            this.cellSize / 2 - 4,
             0,
             Math.PI * 2
           )
           this.ctx.fill()
           
           // 高光
-          this.ctx.fillStyle = 'rgba(255,255,255,0.3)'
+          this.ctx.fillStyle = 'rgba(255,255,255,0.4)'
           this.ctx.beginPath()
           this.ctx.arc(
-            x + this.cellSize / 2 - 5,
-            y + this.cellSize / 2 - 5,
-            this.cellSize / 6,
+            x + this.cellSize / 2 - 3,
+            y + this.cellSize / 2 - 3,
+            this.cellSize / 8,
             0,
             Math.PI * 2
           )
@@ -404,48 +476,30 @@ export default class Game {
       }
     }
     
-    // 广告按钮
-    this.renderAdButtons()
-  }
-  
-  // 渲染广告按钮
-  renderAdButtons() {
-    const btnY = this.height - 80
-    
-    // 复活按钮（游戏结束时显示）
-    if (this.state === 'gameover') {
-      this.ctx.fillStyle = '#FFD700'
-      this.ctx.fillRect(this.width / 2 - 80, btnY, 160, 50)
-      this.ctx.fillStyle = '#000'
-      this.ctx.font = '18px Arial'
+    // 提示
+    if (!this.selectedCell) {
+      this.ctx.fillStyle = 'rgba(255,255,255,0.6)'
+      this.ctx.font = '14px Arial'
       this.ctx.textAlign = 'center'
-      this.ctx.fillText('看广告复活', this.width / 2, btnY + 32)
+      this.ctx.fillText('滑动宝石交换', this.width / 2, this.offsetY + this.cellSize * this.gridSize + 25)
     }
-    
-    // 提示按钮
-    this.ctx.fillStyle = '#4ECDC4'
-    this.ctx.fillRect(20, btnY, 100, 40)
-    this.ctx.fillStyle = '#fff'
-    this.ctx.font = '16px Arial'
-    this.ctx.textAlign = 'center'
-    this.ctx.fillText('看广告 +5 步', 70, btnY + 26)
   }
   
   // 渲染游戏结束
   renderGameOver() {
-    this.ctx.fillStyle = 'rgba(0,0,0,0.7)'
+    this.ctx.fillStyle = 'rgba(0,0,0,0.8)'
     this.ctx.fillRect(0, 0, this.width, this.height)
     
     this.ctx.fillStyle = '#fff'
-    this.ctx.font = 'bold 40px Arial'
+    this.ctx.font = 'bold 32px Arial'
     this.ctx.textAlign = 'center'
     this.ctx.fillText('游戏结束', this.width / 2, this.height / 3)
     
-    this.ctx.font = '28px Arial'
-    this.ctx.fillText(`最终分数：${this.score}`, this.width / 2, this.height / 2)
+    this.ctx.font = '24px Arial'
+    this.ctx.fillText('分数:' + this.score, this.width / 2, this.height / 2)
     
-    this.ctx.font = '20px Arial'
-    this.ctx.fillText('看广告可以复活！', this.width / 2, this.height / 2 + 60)
+    this.ctx.font = '18px Arial'
+    this.ctx.fillText('点击看广告复活', this.width / 2, this.height / 2 + 50)
   }
   
   // 暂停
@@ -459,20 +513,16 @@ export default class Game {
   resume() {
     if (this.state === 'paused') {
       this.state = 'playing'
-      this.gameLoop()
     }
   }
   
-  // 使用广告奖励
+  // 广告奖励
   useAdReward(type) {
     if (type === 'extraMoves') {
       this.moves += 5
-      this.state = 'playing'
-      this.gameLoop()
     } else if (type === 'revive') {
       this.moves = 10
-      this.state = 'playing'
-      this.gameLoop()
     }
+    this.state = 'playing'
   }
 }

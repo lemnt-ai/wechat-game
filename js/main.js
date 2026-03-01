@@ -24,64 +24,34 @@ export default class Main {
         platform: systemInfo.platform,
         system: systemInfo.system,
         windowWidth: systemInfo.windowWidth,
-        windowHeight: systemInfo.windowHeight,
-        version: systemInfo.version
+        windowHeight: systemInfo.windowHeight
       })
       
-      // 获取 Canvas - 微信小游戏专用方式
-      this.canvas = wx.getSystemInfoSync().canvas
-      if (!this.canvas) {
-        // 备用方案：尝试创建 Canvas
-        if (typeof wx.createCanvas === 'function') {
-          this.canvas = wx.createCanvas()
-          console.log('已创建 Canvas')
-        } else {
-          // 开发者工具中可能没有 canvas，使用离屏 Canvas
-          console.log('创建离屏 Canvas')
-          this.canvas = {
-            width: systemInfo.windowWidth,
-            height: systemInfo.windowHeight,
-            getContext: () => {
-              // 创建一个 2D 上下文用于模拟
-              const offscreen = document ? document.createElement('canvas') : null
-              if (offscreen) {
-                offscreen.width = systemInfo.windowWidth
-                offscreen.height = systemInfo.windowHeight
-                return offscreen.getContext('2d')
-              }
-              return null
-            }
-          }
-        }
-      }
-      
+      // 获取 Canvas
+      this.canvas = systemInfo.canvas
       if (this.canvas) {
-        console.log('Canvas 已就绪:', this.canvas.width, this.canvas.height)
+        // 设置 Canvas 尺寸
+        this.canvas.width = systemInfo.windowWidth
+        this.canvas.height = systemInfo.windowHeight
         this.ctx = this.canvas.getContext('2d')
+        console.log('Canvas 已就绪:', this.canvas.width, 'x', this.canvas.height)
       } else {
         console.error('无法获取 Canvas')
+        return
       }
       
-      // 初始化广告管理器
+      // 初始化广告
       this.adManager = new AdManager()
       this.adManager.init()
       
-      // 初始化游戏（传入 canvas 和 ctx）
+      // 初始化游戏
       this.game = new Game(this.adManager, this.canvas, this.ctx)
       this.game.start()
       
-      console.log('=== 游戏启动完成 ===')
+      console.log('=== 启动完成 ===')
     } catch (err) {
-      console.error('游戏启动失败:', err)
-      console.error('错误堆栈:', err.stack)
-      
-      // 显示错误信息
-      this.showError(err.message)
+      console.error('启动失败:', err)
+      console.error('堆栈:', err.stack)
     }
-  }
-  
-  // 显示错误
-  showError(message) {
-    console.error('显示错误:', message)
   }
 }
