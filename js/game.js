@@ -1,6 +1,6 @@
 /**
- * 游戏核心逻辑 - 开心消消乐
- * 滑动模式版本
+ * 大家来找茬 - 微信小游戏
+ * 找出两张图片之间的差异
  */
 
 export default class Game {
@@ -11,342 +11,194 @@ export default class Game {
     
     // 获取系统信息
     this.systemInfo = wx.getSystemInfoSync()
-    
-    // 屏幕尺寸
     this.width = this.systemInfo.windowWidth
     this.height = this.systemInfo.windowHeight
     
-    console.log('[游戏] 尺寸:', this.width, 'x', this.height)
+    console.log('[找茬] 初始化:', this.width, 'x', this.height)
     
     // 游戏状态
-    this.state = 'menu'
-    this.score = 0
-    this.moves = 20
+    this.state = 'menu' // menu, playing, gameover
+    this.level = 1
+    this.maxLevel = 5
     
-    // 网格配置
-    this.gridSize = 6
-    this.cellSize = Math.min(this.width, this.height) / this.gridSize * 0.9
-    this.offsetX = (this.width - this.cellSize * this.gridSize) / 2
-    this.offsetY = (this.height - this.cellSize * this.gridSize) / 2 + 30
+    // 差异点配置
+    this.diffCount = 3 // 每关差异数量
+    this.foundDiffs = [] // 已找到的差异
+    this.markedDiffs = [] // 已标记的差异位置
     
-    // 宝石颜色
-    this.gemColors = [
-      '#FF6B6B',
-      '#4ECDC4', 
-      '#45B7D1',
-      '#96CEB4',
-      '#FFEAA7',
-      '#DDA0DD'
-    ]
+    // 图片区域配置
+    this.padding = 20
+    this.gap = 10
+    this.imageWidth = (this.width - this.padding * 3 - this.gap) / 2
+    this.imageHeight = this.imageWidth
     
-    this.grid = []
-    this.selectedCell = null
-    this.isProcessing = false
+    // 差异点数据（简化版：用色块表示图片）
+    this.differences = []
     
-    // 滑动相关
-    this.touchStart = null
-    this.minSwipeDistance = 30 // 最小滑动距离
+    // 触摸相关
+    this.lastTapTime = 0
   }
   
-  // 初始化网格
-  initGrid() {
-    this.grid = []
-    for (let i = 0; i < this.gridSize; i++) {
-      this.grid[i] = []
-      for (let j = 0; j < this.gridSize; j++) {
-        let color
-        do {
-          color = Math.floor(Math.random() * this.gemColors.length)
-        } while (
-          (i >= 2 && this.grid[i-1][j] === color && this.grid[i-2][j] === color) ||
-          (j >= 2 && this.grid[i][j-1] === color && this.grid[i][j-2] === color)
+  // 生成差异点
+  generateDifferences() {
+    this.differences = []
+    this.foundDiffs = []
+    this.markedDiffs = []
+    
+    // 随机生成差异点位置
+    for (let i = 0; i < this.diffCount; i++) {
+      let diff
+      let attempts = 0
+      do {
+        diff = {
+          x: Math.random() * (this.imageWidth - 40) + 20,
+          y: Math.random() * (this.imageHeight - 40) + 20,
+          radius: 15 + Math.random() * 10,
+          found: false
+        }
+        attempts++
+      } while (
+        attempts < 50 &&
+        this.differences.some(d => 
+          Math.abs(d.x - diff.x) < 50 && Math.abs(d.y - diff.y) < 50
         )
-        this.grid[i][j] = color
-      }
-    }
-  }
-  
-  // 检查匹配
-  checkMatch(row, col) {
-    const color = this.grid[row][col]
-    
-    // 横向
-    if (col >= 2 && this.grid[row][col-1] === color && this.grid[row][col-2] === color) {
-      return true
-    }
-    // 纵向
-    if (row >= 2 && this.grid[row-1][col] === color && this.grid[row-2][col] === color) {
-      return true
+      )
+      this.differences.push(diff)
     }
     
-    return false
+    console.log('[找茬] 生成差异点:', this.differences.length)
   }
   
   // 绑定事件
   bindEvents() {
-    console.log('[事件] 开始绑定')
+    console.log('[事件] 绑定')
     
-    // 触摸开始 - 记录起始位置
     wx.onTouchStart((res) => {
       const touch = res.touches[0]
-      this.touchStart = {
-        x: touch.clientX,
-        y: touch.clientY,
-        time: Date.now()
-      }
-      console.log('[滑动] 开始:', this.touchStart.x, this.touchStart.y)
+      this.handleTap(touch.clientX, touch.clientY)
     })
     
-    // 触摸结束 - 检测滑动
-    wx.onTouchEnd((res) => {
-      if (!this.touchStart) return
-      
-      const touch = res.changedTouches[0]
-      const deltaX = touch.clientX - this.touchStart.x
-      const deltaY = touch.clientY - this.touchStart.y
-      const deltaTime = Date.now() - this.touchStart.time
-      
-      console.log('[滑动] 结束:', touch.clientX, touch.clientY)
-      console.log('[滑动] 距离:', deltaX, deltaY, '时间:', deltaTime)
-      
-      // 判断是点击还是滑动
-      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
-      
-      if (distance < this.minSwipeDistance) {
-        // 点击 - 处理点击逻辑
-        this.handleTap(this.touchStart.x, this.touchStart.y)
-      } else {
-        // 滑动 - 处理滑动逻辑
-        this.handleSwipe(deltaX, deltaY)
-      }
-      
-      this.touchStart = null
-    })
-    
-    console.log('[事件] 绑定完成')
+    console.log('[事件] 完成')
   }
   
   // 处理点击
   handleTap(x, y) {
-    console.log('[点击] 坐标:', x, y)
+    console.log('[点击]', x, y)
     
-    if (this.isProcessing) {
-      console.log('[点击] 处理中，忽略')
-      return
-    }
-    
-    // 菜单状态 - 点击开始
     if (this.state === 'menu') {
-      console.log('[点击] 开始游戏')
       this.startGame()
       return
     }
     
-    // 游戏结束 - 看广告
     if (this.state === 'gameover') {
-      console.log('[点击] 游戏结束')
-      this.adManager.showRewardedAd()
+      this.level = 1
+      this.startGame()
       return
     }
     
-    // 计算点击的网格位置
-    const col = Math.floor((x - this.offsetX) / this.cellSize)
-    const row = Math.floor((y - this.offsetY) / this.cellSize)
+    if (this.state !== 'playing') return
     
-    console.log('[点击] 网格:', row, col)
+    // 计算点击位置（相对于左图）
+    const leftImageX = this.padding
+    const leftImageY = this.padding + 40
     
-    // 检查是否在有效范围内
-    if (row < 0 || row >= this.gridSize || col < 0 || col >= this.gridSize) {
-      this.selectedCell = null
-      this.render()
-      return
-    }
-    
-    // 第一次点击 - 选中
-    if (!this.selectedCell) {
-      console.log('[点击] 选中:', row, col)
-      this.selectedCell = { row, col }
-      this.render()
-    } else {
-      // 第二次点击 - 尝试交换
-      const dr = Math.abs(this.selectedCell.row - row)
-      const dc = Math.abs(this.selectedCell.col - col)
+    // 检查是否点击在左图范围内
+    if (x >= leftImageX && x <= leftImageX + this.imageWidth &&
+        y >= leftImageY && y <= leftImageY + this.imageHeight) {
       
-      console.log('[点击] 尝试交换:', this.selectedCell, '->', { row, col })
+      const clickX = x - leftImageX
+      const clickY = y - leftImageY
       
-      // 必须是相邻的
-      if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
-        this.swapAndCheck(this.selectedCell, { row, col })
-      } else {
-        // 不是相邻的，更新选中
-        this.selectedCell = { row, col }
-        this.render()
-      }
+      console.log('[点击] 图片内:', clickX, clickY)
+      
+      // 检查是否点到差异点
+      this.checkDifference(clickX, clickY)
     }
   }
   
-  // 处理滑动
-  handleSwipe(deltaX, deltaY) {
-    console.log('[滑动] 方向检测:', deltaX, deltaY)
-    
-    if (this.isProcessing) {
-      console.log('[滑动] 处理中，忽略')
-      return
-    }
-    
-    if (this.state !== 'playing') {
-      return
-    }
-    
-    // 如果没有选中，先选中第一个
-    if (!this.selectedCell) {
-      console.log('[滑动] 未选中，忽略')
-      return
-    }
-    
-    // 判断滑动方向
-    let targetCell = null
-    
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      // 水平滑动
-      if (deltaX > 0) {
-        // 向右
-        targetCell = { row: this.selectedCell.row, col: this.selectedCell.col + 1 }
-        console.log('[滑动] 向右')
-      } else {
-        // 向左
-        targetCell = { row: this.selectedCell.row, col: this.selectedCell.col - 1 }
-        console.log('[滑动] 向左')
-      }
-    } else {
-      // 垂直滑动
-      if (deltaY > 0) {
-        // 向下
-        targetCell = { row: this.selectedCell.row + 1, col: this.selectedCell.col }
-        console.log('[滑动] 向下')
-      } else {
-        // 向上
-        targetCell = { row: this.selectedCell.row - 1, col: this.selectedCell.col }
-        console.log('[滑动] 向上')
-      }
-    }
-    
-    // 检查目标位置是否有效
-    if (targetCell && 
-        targetCell.row >= 0 && targetCell.row < this.gridSize &&
-        targetCell.col >= 0 && targetCell.col < this.gridSize) {
-      console.log('[滑动] 目标:', targetCell)
-      this.swapAndCheck(this.selectedCell, targetCell)
-    } else {
-      console.log('[滑动] 目标无效')
-    }
-  }
-  
-  // 交换并检查
-  swapAndCheck(cell1, cell2) {
-    console.log('[交换] 开始')
-    
-    const val1 = this.grid[cell1.row][cell1.col]
-    const val2 = this.grid[cell2.row][cell2.col]
-    
-    // 交换
-    this.grid[cell1.row][cell1.col] = val2
-    this.grid[cell2.row][cell2.col] = val1
-    
-    // 检查匹配
-    const match1 = this.checkMatch(cell1.row, cell1.col)
-    const match2 = this.checkMatch(cell2.row, cell2.col)
-    
-    console.log('[交换] 匹配:', match1, match2)
-    
-    if (match1 || match2) {
-      // 有匹配，消除
-      console.log('[交换] 消除!')
-      this.moves--
-      this.isProcessing = true
-      this.selectedCell = null
-      this.render()
+  // 检查差异
+  checkDifference(x, y) {
+    for (let i = 0; i < this.differences.length; i++) {
+      const diff = this.differences[i]
+      if (diff.found) continue
       
-      setTimeout(() => {
-        this.processMatches()
-      }, 100)
-    } else {
-      // 无匹配，换回来
-      console.log('[交换] 无匹配，还原')
-      this.grid[cell1.row][cell1.col] = val1
-      this.grid[cell2.row][cell2.col] = val2
-      this.selectedCell = null
-      this.render()
-    }
-  }
-  
-  // 处理匹配
-  processMatches() {
-    console.log('[消除] 开始')
-    
-    const matched = []
-    
-    // 查找所有匹配
-    for (let i = 0; i < this.gridSize; i++) {
-      for (let j = 0; j < this.gridSize; j++) {
-        if (this.checkMatch(i, j)) {
-          matched.push({ row: i, col: j })
+      const dx = x - diff.x
+      const dy = y - diff.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      
+      console.log('[检查] 差异点:', i, '距离:', distance, '半径:', diff.radius)
+      
+      if (distance <= diff.radius + 10) {
+        // 找到差异！
+        diff.found = true
+        this.foundDiffs.push(i)
+        this.markedDiffs.push({ x, y })
+        
+        console.log('[找茬] 找到差异!', this.foundDiffs.length, '/', this.diffCount)
+        
+        // 播放效果
+        this.showFoundEffect(x, y)
+        
+        // 检查是否全部找到
+        if (this.foundDiffs.length >= this.diffCount) {
+          setTimeout(() => {
+            this.levelComplete()
+          }, 500)
         }
+        break
       }
     }
     
-    console.log('[消除] 数量:', matched.length)
-    
-    if (matched.length === 0) {
-      this.isProcessing = false
-      this.checkGameState()
-      return
-    }
-    
-    // 计分
-    this.score += matched.length * 10
-    
-    // 消除
-    matched.forEach(({ row, col }) => {
-      this.grid[row][col] = -1
-    })
-    
-    // 下落
-    this.dropGems()
-    
-    this.render()
-    
-    // 连锁反应
-    setTimeout(() => {
-      this.processMatches()
-    }, 300)
-  }
-  
-  // 宝石下落
-  dropGems() {
-    for (let col = 0; col < this.gridSize; col++) {
-      let writeRow = this.gridSize - 1
-      for (let row = this.gridSize - 1; row >= 0; row--) {
-        if (this.grid[row][col] !== -1) {
-          this.grid[writeRow][col] = this.grid[row][col]
-          writeRow--
-        }
-      }
-      while (writeRow >= 0) {
-        this.grid[writeRow][col] = Math.floor(Math.random() * this.gemColors.length)
-        writeRow--
-      }
-    }
     this.render()
   }
   
-  // 检查游戏状态
-  checkGameState() {
-    if (this.moves <= 0) {
+  // 显示找到效果
+  showFoundEffect(x, y) {
+    // 简单实现：在渲染时显示圈圈
+  }
+  
+  // 关卡完成
+  levelComplete() {
+    console.log('[关卡] 完成:', this.level)
+    
+    if (this.level >= this.maxLevel) {
+      // 游戏通关
       this.state = 'gameover'
+      this.showWin()
+    } else {
+      // 下一关
+      this.level++
+      this.generateDifferences()
+      this.render()
+      
+      // 显示提示
+      this.showLevelUp()
     }
-    this.isProcessing = false
+  }
+  
+  // 显示通关
+  showWin() {
     this.render()
+  }
+  
+  // 显示升级
+  showLevelUp() {
+    const ctx = this.ctx
+    ctx.fillStyle = 'rgba(0,0,0,0.7)'
+    ctx.fillRect(0, 0, this.width, this.height)
+    
+    ctx.fillStyle = '#FFD700'
+    ctx.font = 'bold 36px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('第' + this.level + '关', this.width / 2, this.height / 2)
+    
+    ctx.font = '20px Arial'
+    ctx.fillStyle = '#fff'
+    ctx.fillText('准备...', this.width / 2, this.height / 2 + 50)
+    
+    setTimeout(() => {
+      this.render()
+    }, 1500)
   }
   
   // 开始游戏
@@ -359,30 +211,16 @@ export default class Game {
   
   // 开始新游戏
   startGame() {
-    console.log('[游戏] 新游戏')
+    console.log('[游戏] 开始')
     this.state = 'playing'
-    this.score = 0
-    this.moves = 20
-    this.isProcessing = false
-    this.selectedCell = null
-    this.initGrid()
+    this.level = 1
+    this.generateDifferences()
     this.render()
-  }
-  
-  // 游戏循环
-  gameLoop() {
-    if (this.state === 'playing') {
-      this.render()
-      requestAnimationFrame(() => this.gameLoop())
-    }
   }
   
   // 渲染
   render() {
-    if (!this.ctx) {
-      console.warn('[渲染] ctx 为空')
-      return
-    }
+    if (!this.ctx) return
     
     // 清空
     this.ctx.fillStyle = '#1a1a2e'
@@ -393,113 +231,240 @@ export default class Game {
     } else if (this.state === 'playing') {
       this.renderGame()
     } else if (this.state === 'gameover') {
-      this.renderGameOver()
+      this.renderWin()
     }
   }
   
   // 渲染菜单
   renderMenu() {
-    this.ctx.fillStyle = '#fff'
-    this.ctx.font = 'bold 36px Arial'
-    this.ctx.textAlign = 'center'
-    this.ctx.fillText('开心消消乐', this.width / 2, this.height / 3)
+    const ctx = this.ctx
     
-    this.ctx.font = '20px Arial'
-    this.ctx.fillText('滑动宝石进行交换', this.width / 2, this.height / 2 - 20)
-    this.ctx.fillText('点击屏幕开始', this.width / 2, this.height / 2 + 20)
+    // 标题
+    ctx.fillStyle = '#FFD700'
+    ctx.font = 'bold 42px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('大家来找茬', this.width / 2, this.height / 4)
+    
+    // 说明
+    ctx.fillStyle = '#fff'
+    ctx.font = '18px Arial'
+    ctx.fillText('找出两张图片的差异', this.width / 2, this.height / 3)
+    ctx.fillText('共 ' + this.maxLevel + ' 关', this.width / 2, this.height / 3 + 30)
+    
+    // 示例图
+    const demoSize = 100
+    const demoX = (this.width - demoSize * 2 - 10) / 2
+    const demoY = this.height / 2
+    
+    // 左图
+    ctx.fillStyle = '#4ECDC4'
+    ctx.fillRect(demoX, demoY, demoSize, demoSize)
+    ctx.fillStyle = '#FF6B6B'
+    ctx.beginPath()
+    ctx.arc(demoX + 30, demoY + 30, 15, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 右图（有差异）
+    ctx.fillStyle = '#4ECDC4'
+    ctx.fillRect(demoX + demoSize + 10, demoY, demoSize, demoSize)
+    ctx.fillStyle = '#45B7D1' // 颜色不同
+    ctx.beginPath()
+    ctx.arc(demoX + demoSize + 10 + 30, demoY + 30, 15, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 差异标记
+    ctx.strokeStyle = '#FFD700'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(demoX + demoSize + 10 + 30, demoY + 30, 20, 0, Math.PI * 2)
+    ctx.stroke()
     
     // 开始按钮
-    this.ctx.fillStyle = '#4ECDC4'
-    this.ctx.fillRect(this.width / 2 - 80, this.height / 2 + 50, 160, 50)
-    this.ctx.fillStyle = '#fff'
-    this.ctx.fillText('开始游戏', this.width / 2, this.height / 2 + 82)
+    ctx.fillStyle = '#4ECDC4'
+    ctx.fillRect(this.width / 2 - 80, this.height * 0.75, 160, 55)
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 24px Arial'
+    ctx.fillText('开始游戏', this.width / 2, this.height * 0.75 + 35)
   }
   
   // 渲染游戏
   renderGame() {
-    // 分数和步数
-    this.ctx.fillStyle = '#fff'
-    this.ctx.font = '18px Arial'
-    this.ctx.textAlign = 'left'
-    this.ctx.fillText('分数:' + this.score, 15, 30)
-    this.ctx.textAlign = 'right'
-    this.ctx.fillText('步数:' + this.moves, this.width - 15, 30)
+    const ctx = this.ctx
     
-    // 网格背景
-    this.ctx.fillStyle = '#16213e'
-    this.ctx.fillRect(
-      this.offsetX - 3,
-      this.offsetY - 3,
-      this.cellSize * this.gridSize + 6,
-      this.cellSize * this.gridSize + 6
-    )
+    // 顶部信息
+    ctx.fillStyle = '#fff'
+    ctx.font = '18px Arial'
+    ctx.textAlign = 'left'
+    ctx.fillText('关卡：' + this.level + '/' + this.maxLevel, 15, 28)
+    ctx.textAlign = 'right'
+    ctx.fillText('找到：' + this.foundDiffs.length + '/' + this.diffCount, this.width - 15, 28)
     
-    // 绘制宝石
-    for (let i = 0; i < this.gridSize; i++) {
-      for (let j = 0; j < this.gridSize; j++) {
-        const x = this.offsetX + j * this.cellSize
-        const y = this.offsetY + i * this.cellSize
-        const color = this.grid[i][j]
-        
-        if (color >= 0) {
-          // 宝石
-          this.ctx.fillStyle = this.gemColors[color]
-          this.ctx.beginPath()
-          this.ctx.arc(
-            x + this.cellSize / 2,
-            y + this.cellSize / 2,
-            this.cellSize / 2 - 4,
-            0,
-            Math.PI * 2
-          )
-          this.ctx.fill()
-          
-          // 高光
-          this.ctx.fillStyle = 'rgba(255,255,255,0.4)'
-          this.ctx.beginPath()
-          this.ctx.arc(
-            x + this.cellSize / 2 - 3,
-            y + this.cellSize / 2 - 3,
-            this.cellSize / 8,
-            0,
-            Math.PI * 2
-          )
-          this.ctx.fill()
-        }
-        
-        // 选中框
-        if (this.selectedCell && this.selectedCell.row === i && this.selectedCell.col === j) {
-          this.ctx.strokeStyle = '#fff'
-          this.ctx.lineWidth = 3
-          this.ctx.strokeRect(x + 2, y + 2, this.cellSize - 4, this.cellSize - 4)
-        }
-      }
+    const imageY = this.padding + 40
+    
+    // 绘制左图
+    this.drawImage(ctx, this.padding, imageY, false)
+    
+    // 绘制右图
+    this.drawImage(ctx, this.padding + this.imageWidth + this.gap, imageY, true)
+    
+    // 绘制已标记的差异
+    this.drawMarkedDiffs(ctx, this.padding, imageY)
+    this.drawMarkedDiffs(ctx, this.padding + this.imageWidth + this.gap, imageY)
+    
+    // 底部提示
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    ctx.font = '14px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('点击左图找出差异', this.width / 2, imageY + this.imageHeight + 25)
+  }
+  
+  // 绘制图片（用色块模拟）
+  drawImage(ctx, x, y, isRight) {
+    // 背景
+    ctx.fillStyle = '#2d3436'
+    ctx.fillRect(x, y, this.imageWidth, this.imageHeight)
+    
+    // 边框
+    ctx.strokeStyle = '#636e72'
+    ctx.lineWidth = 2
+    ctx.strokeRect(x, y, this.imageWidth, this.imageHeight)
+    
+    // 绘制场景（简化版：用几何图形表示）
+    const centerX = x + this.imageWidth / 2
+    const centerY = y + this.imageHeight / 2
+    
+    // 天空
+    ctx.fillStyle = '#74b9ff'
+    ctx.fillRect(x, y, this.imageWidth, this.imageHeight / 2)
+    
+    // 草地
+    ctx.fillStyle = '#55efc4'
+    ctx.fillRect(x, y + this.imageHeight / 2, this.imageWidth, this.imageHeight / 2)
+    
+    // 太阳
+    ctx.fillStyle = '#ffeaa7'
+    ctx.beginPath()
+    ctx.arc(centerX - 30, y + 40, 25, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 房子
+    ctx.fillStyle = '#fd79a8'
+    ctx.fillRect(centerX - 40, centerY, 80, 60)
+    
+    // 屋顶
+    ctx.fillStyle = '#d63031'
+    ctx.beginPath()
+    ctx.moveTo(centerX - 50, centerY)
+    ctx.lineTo(centerX, centerY - 40)
+    ctx.lineTo(centerX + 50, centerY)
+    ctx.fill()
+    
+    // 门
+    ctx.fillStyle = '#6c5ce7'
+    ctx.fillRect(centerX - 15, centerY + 20, 30, 40)
+    
+    // 窗户
+    ctx.fillStyle = '#fdcb6e'
+    ctx.fillRect(centerX - 35, centerY + 10, 20, 20)
+    ctx.fillRect(centerX + 15, centerY + 10, 20, 20)
+    
+    // 树
+    ctx.fillStyle = '#a29bfe'
+    ctx.fillRect(centerX + 60, centerY + 20, 15, 40)
+    ctx.fillStyle = '#00b894'
+    ctx.beginPath()
+    ctx.arc(centerX + 67, centerY, 30, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 绘制差异（右图时）
+    if (isRight) {
+      this.drawRightDifferences(ctx, x, y)
     }
     
-    // 提示
-    if (!this.selectedCell) {
-      this.ctx.fillStyle = 'rgba(255,255,255,0.6)'
-      this.ctx.font = '14px Arial'
-      this.ctx.textAlign = 'center'
-      this.ctx.fillText('滑动宝石交换', this.width / 2, this.offsetY + this.cellSize * this.gridSize + 25)
+    // 绘制差异标记圈
+    this.drawDifferenceCircles(ctx, x, y)
+  }
+  
+  // 绘制右图差异
+  drawRightDifferences(ctx, x, y) {
+    // 差异 1: 太阳颜色不同
+    if (this.level >= 1) {
+      ctx.fillStyle = '#fab1a0' // 不同的颜色
+      ctx.beginPath()
+      ctx.arc(x + this.imageWidth / 2 - 30 + 67, y + 40, 25, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    
+    // 差异 2: 门颜色不同
+    if (this.level >= 2) {
+      ctx.fillStyle = '#a29bfe'
+      ctx.fillRect(x + this.imageWidth / 2 - 15 + 67, y + this.imageHeight / 2 + 20, 30, 40)
+    }
+    
+    // 差异 3: 树颜色不同
+    if (this.level >= 3) {
+      ctx.fillStyle = '#6c5ce7'
+      ctx.beginPath()
+      ctx.arc(x + this.imageWidth / 2 + 67 + 67, y + this.imageHeight / 2, 30, 0, Math.PI * 2)
+      ctx.fill()
     }
   }
   
-  // 渲染游戏结束
-  renderGameOver() {
-    this.ctx.fillStyle = 'rgba(0,0,0,0.8)'
-    this.ctx.fillRect(0, 0, this.width, this.height)
+  // 绘制差异标记圈
+  drawDifferenceCircles(ctx, x, y) {
+    for (let i = 0; i < this.differences.length; i++) {
+      const diff = this.differences[i]
+      if (!diff.found) continue
+      
+      const cx = x + diff.x
+      const cy = y + diff.y
+      
+      // 红色圈圈
+      ctx.strokeStyle = '#ff0000'
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.arc(cx, cy, diff.radius + 5, 0, Math.PI * 2)
+      ctx.stroke()
+      
+      // 对勾
+      ctx.fillStyle = '#00ff00'
+      ctx.font = 'bold 20px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('✓', cx, cy)
+    }
+  }
+  
+  // 绘制已标记的差异
+  drawMarkedDiffs(ctx, offsetX, offsetY) {
+    // 在图片上方显示标记
+  }
+  
+  // 渲染通关
+  renderWin() {
+    const ctx = this.ctx
     
-    this.ctx.fillStyle = '#fff'
-    this.ctx.font = 'bold 32px Arial'
-    this.ctx.textAlign = 'center'
-    this.ctx.fillText('游戏结束', this.width / 2, this.height / 3)
+    // 背景
+    ctx.fillStyle = 'rgba(0,0,0,0.8)'
+    ctx.fillRect(0, 0, this.width, this.height)
     
-    this.ctx.font = '24px Arial'
-    this.ctx.fillText('分数:' + this.score, this.width / 2, this.height / 2)
+    // 标题
+    ctx.fillStyle = '#FFD700'
+    ctx.font = 'bold 40px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('恭喜通关!', this.width / 2, this.height / 3)
     
-    this.ctx.font = '18px Arial'
-    this.ctx.fillText('点击看广告复活', this.width / 2, this.height / 2 + 50)
+    // 分数
+    ctx.fillStyle = '#fff'
+    ctx.font = '24px Arial'
+    ctx.fillText('你找出了所有差异!', this.width / 2, this.height / 2)
+    
+    // 重新开始
+    ctx.fillStyle = '#4ECDC4'
+    ctx.fillRect(this.width / 2 - 80, this.height * 0.65, 160, 50)
+    ctx.fillStyle = '#fff'
+    ctx.font = '20px Arial'
+    ctx.fillText('再玩一次', this.width / 2, this.height * 0.65 + 30)
   }
   
   // 暂停
@@ -518,11 +483,6 @@ export default class Game {
   
   // 广告奖励
   useAdReward(type) {
-    if (type === 'extraMoves') {
-      this.moves += 5
-    } else if (type === 'revive') {
-      this.moves = 10
-    }
-    this.state = 'playing'
+    console.log('[广告] 奖励:', type)
   }
 }
