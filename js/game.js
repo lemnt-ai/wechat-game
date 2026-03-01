@@ -29,11 +29,14 @@ export default class Game {
     this.hookY = this.height - 80  // 底部位置
     this.hookTargetX = this.width / 2
     
-    // 鱼线
-    this.lineLength = 30  // 初始长度
-    this.maxLineLength = 350  // 最大长度（缩短）
-    this.lineSpeed = 8
-    this.lineState = 'idle'
+    // 鱼线 - 钓鱼大赢家模式
+    this.lineLength = 0
+    this.maxLineLength = 350
+    this.lineSpeed = 10
+    this.lineState = 'idle' // idle, casting, reeling, hooked
+    this.castPower = 0 // 抛竿力度 0-100
+    this.isCasting = false // 是否正在蓄力抛竿
+    this.castStartTime = 0 // 蓄力开始时间
     
     // 鱼配置
     this.fishTypes = [
@@ -123,19 +126,21 @@ export default class Game {
       this.hookX += (this.hookTargetX > this.hookX) ? 8 : -8
     }
     
-    // 鱼线状态（向上抛竿）
-    if (this.lineState === 'dropping') {
+    // 鱼线状态（钓鱼大赢家模式）
+    if (this.lineState === 'casting') {
+      // 抛竿后自动向下沉
       this.lineLength += this.lineSpeed
       if (this.lineLength >= this.maxLineLength) {
         this.lineLength = this.maxLineLength
-        this.lineState = 'pulling'
-        console.log('[鱼钩] 到达水面')
+        this.lineState = 'reeling'
+        console.log('[鱼钩] 到达最远距离，自动收竿')
       }
       this.checkCollision()
-    } else if (this.lineState === 'pulling') {
-      this.lineLength -= this.lineSpeed * 1.5
-      if (this.lineLength <= 0) {
-        this.lineLength = 0
+    } else if (this.lineState === 'reeling') {
+      // 收竿
+      this.lineLength -= this.lineSpeed * 2
+      if (this.lineLength <= 50) {
+        this.lineLength = 50
         this.lineState = 'idle'
         if (this.caughtFish) {
           this.score += this.caughtFish.type.score
@@ -201,12 +206,13 @@ export default class Game {
     }
   }
   
-  // 绑定事件
+  // 绑定事件（钓鱼大赢家模式 - 蓄力抛竿）
   bindEvents() {
     console.log('[事件] 绑定')
     
     wx.onTouchStart((res) => {
-      console.log('[TouchStart]')
+      const touch = res.touches[0]
+      console.log('[TouchStart]', touch.clientX, touch.clientY)
       
       if (this.state === 'menu') {
         console.log('[菜单] 开始游戏')
@@ -220,26 +226,49 @@ export default class Game {
         return
       }
       
-      // 检查是否点击了广告按钮
-      if (this.checkAdButton(res.touches[0].clientX, res.touches[0].clientY)) {
+      // 检查广告按钮
+      if (this.checkAdButton(touch.clientX, touch.clientY)) {
         this.showTimeAd()
         return
       }
       
-      // 放下鱼钩
+      // 钓鱼大赢家模式：点击蓄力抛竿
       if (this.lineState === 'idle') {
-        console.log('[钓鱼] 放下鱼钩')
-        this.lineState = 'dropping'
+        console.log('[钓鱼] 开始蓄力')
+        this.isCasting = true
+        this.castPower = 0
+        this.castStartTime = Date.now()
+      } else if (this.lineState === 'casting') {
+        // 再次点击：收竿
+        console.log('[钓鱼] 收竿')
+        this.lineState = 'reeling'
+        this.isCasting = false
       }
     })
     
     wx.onTouchMove((res) => {
       const touch = res.touches[0]
       this.hookTargetX = touch.clientX
+      
+      // 蓄力中：显示力度条
+      if (this.isCasting && this.lineState === 'idle') {
+        const elapsed = Date.now() - this.castStartTime
+        this.castPower = Math.min(elapsed / 20, 100) // 2 秒满力
+      }
     })
     
     wx.onTouchEnd(() => {
       console.log('[TouchEnd]')
+      
+      // 松开手指：抛竿
+      if (this.isCasting && this.lineState === 'idle') {
+        console.log('[钓鱼] 抛竿！力度:', this.castPower)
+        this.lineState = 'casting'
+        this.isCasting = false
+        
+        // 根据力度设置初始鱼线长度
+        this.lineLength = 50 + (this.castPower / 100) * (this.maxLineLength - 50)
+      }
     })
     
     console.log('[事件] 完成')
@@ -371,8 +400,9 @@ export default class Game {
     
     ctx.fillStyle = '#fff'
     ctx.font = '18px Arial'
-    ctx.fillText('滑动左右移动', this.width / 2, this.height / 3)
-    ctx.fillText('点击放下鱼钩', this.width / 2, this.height / 3 + 35)
+    ctx.fillText('滑动左右移动鱼竿', this.width / 2, this.height / 3)
+    ctx.fillText('长按蓄力，松手抛竿', this.width / 2, this.height / 3 + 35)
+    ctx.fillText('再次点击收竿', this.width / 2, this.height / 3 + 65)
     
     ctx.fillStyle = '#4ECDC4'
     ctx.fillRect(this.width / 2 - 80, this.height / 2, 160, 55)
@@ -436,6 +466,9 @@ export default class Game {
     // 广告按钮（左上角）
     this.renderAdButton()
     
+    // 抛竿力度条（钓鱼大赢家特色）
+    this.renderCastPower(ctx)
+    
     // 路亚鱼竿（底部）
     this.renderFishingRod(ctx)
     
@@ -452,7 +485,6 @@ export default class Game {
     const ctx = this.ctx
     
     if (!this.canShowAd) {
-      // 冷却中
       ctx.fillStyle = 'rgba(0,0,0,0.5)'
       ctx.fillRect(10, 55, 90, 35)
       ctx.fillStyle = '#999'
@@ -460,7 +492,6 @@ export default class Game {
       ctx.textAlign = 'center'
       ctx.fillText(this.adCooldown + '秒后', 55, 78)
     } else {
-      // 可用
       ctx.fillStyle = '#FFD700'
       ctx.fillRect(10, 55, 90, 35)
       ctx.fillStyle = '#000'
@@ -468,6 +499,45 @@ export default class Game {
       ctx.textAlign = 'center'
       ctx.fillText('+30 秒', 55, 78)
     }
+  }
+  
+  // 渲染抛竿力度条（钓鱼大赢家特色）
+  renderCastPower(ctx) {
+    if (!this.isCasting || this.lineState !== 'idle') return
+    
+    const barWidth = 200
+    const barHeight = 20
+    const barX = (this.width - barWidth) / 2
+    const barY = this.height / 2
+    
+    // 背景
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'
+    ctx.fillRect(barX - 2, barY - 2, barWidth + 4, barHeight + 4)
+    
+    // 力度条渐变
+    const gradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0)
+    gradient.addColorStop(0, '#4ECDC4')
+    gradient.addColorStop(0.5, '#FFD700')
+    gradient.addColorStop(1, '#FF6B6B')
+    
+    ctx.fillStyle = gradient
+    ctx.fillRect(barX, barY, barWidth * (this.castPower / 100), barHeight)
+    
+    // 边框
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 2
+    ctx.strokeRect(barX, barY, barWidth, barHeight)
+    
+    // 文字提示
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 16px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('松开抛竿！', this.width / 2, barY - 10)
+    
+    // 力度百分比
+    ctx.fillStyle = '#fff'
+    ctx.font = '14px Arial'
+    ctx.fillText(Math.round(this.castPower) + '%', this.width / 2, barY + 35)
   }
   
   // 渲染路亚鱼竿（缩短版）
