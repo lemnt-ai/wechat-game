@@ -594,55 +594,67 @@ export default class Game {
     const boatX = this.boatX
     const boatY = this.boatY
     
-    // 船身（红色）
+    // 1. 船身（红色，半圆弧形）
     ctx.fillStyle = '#DC143C'
     ctx.beginPath()
-    ctx.ellipse(boatX, boatY, 80, 25, 0, Math.PI, 0)
+    ctx.moveTo(boatX - 90, boatY)
+    ctx.quadraticCurveTo(boatX, boatY + 40, boatX + 90, boatY)
+    ctx.lineTo(boatX + 80, boatY - 15)
+    ctx.quadraticCurveTo(boatX, boatY - 25, boatX - 80, boatY - 15)
+    ctx.closePath()
     ctx.fill()
     
-    // 船舷
-    ctx.fillStyle = '#B01030'
-    ctx.fillRect(boatX - 80, boatY - 10, 160, 10)
+    // 船身装饰线
+    ctx.strokeStyle = '#B01030'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(boatX - 70, boatY - 5)
+    ctx.quadraticCurveTo(boatX, boatY + 20, boatX + 70, boatY - 5)
+    ctx.stroke()
     
-    // 船编号
+    // 2. 船舷（白色）
     ctx.fillStyle = '#fff'
-    ctx.font = 'bold 20px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText('9', boatX, boatY + 5)
+    ctx.fillRect(boatX - 90, boatY - 25, 180, 12)
     
-    // 渔夫
-    const manX = boatX + 20
-    const manY = boatY - 10
+    // 3. 船编号
+    ctx.fillStyle = '#DC143C'
+    ctx.font = 'bold 24px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('9', boatX, boatY - 15)
+    
+    // 4. 渔夫（站在船上）
+    const manX = boatX + 30
+    const manY = boatY - 25
     
     // 身体
     ctx.fillStyle = '#FFD700'
     ctx.beginPath()
-    ctx.arc(manX, manY - 15, 15, 0, Math.PI * 2)
+    ctx.arc(manX, manY - 20, 12, 0, Math.PI * 2)
     ctx.fill()
     
     // 帽子（斗笠）
     ctx.fillStyle = '#8B4513'
     ctx.beginPath()
-    ctx.moveTo(manX - 25, manY - 25)
-    ctx.lineTo(manX, manY - 45)
-    ctx.lineTo(manX + 25, manY - 25)
+    ctx.moveTo(manX - 20, manY - 30)
+    ctx.lineTo(manX, manY - 50)
+    ctx.lineTo(manX + 20, manY - 30)
     ctx.closePath()
     ctx.fill()
     
-    // 鱼竿
+    // 5. 鱼竿
     ctx.strokeStyle = '#8B4513'
     ctx.lineWidth = 3
     ctx.beginPath()
-    ctx.moveTo(manX + 15, manY - 10)
-    ctx.lineTo(manX + 40, manY - 60)
+    ctx.moveTo(manX + 10, manY - 15)
+    ctx.lineTo(manX + 50, manY - 35)
     ctx.stroke()
   }
   
   // 渲染鱼线
   renderFishingLine() {
     const ctx = this.ctx
-    const lineStartX = this.boatX + 30
-    const lineStartY = this.boatY + 10  // 从船边伸出
+    const lineStartX = this.boatX + 50  // 从鱼竿末端
+    const lineStartY = this.boatY - 55  // 鱼竿高度
     
     ctx.strokeStyle = '#fff'
     ctx.lineWidth = 1.5
