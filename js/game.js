@@ -30,21 +30,14 @@ export default class Game {
     this.hookTargetX = this.width / 2
     
     // 鱼线 - 钓鱼大赢家模式
-    this.lineLength = 0
-    this.maxLineLength = 350
-    this.lineSpeed = 10
-    this.lineState = 'idle' // idle, casting, reeling, hooked
+    this.lineLength = 50 // 初始长度（鱼钩在猫咪面前）
+    this.targetLineLength = 50 // 目标长度（蓄力决定）
+    this.maxLineLength = 400 // 最大长度
+    this.lineSpeed = 15 // 鱼钩移动速度
+    this.lineState = 'idle' // idle, moving_out, moving_in
     this.castPower = 0 // 抛竿力度 0-100
-    this.isCasting = false // 是否正在蓄力抛竿
-    this.castStartTime = 0 // 蓄力开始时间
-    
-    // 猫咪动画
-    this.catAnimation = 'idle' // idle, casting, reeling
-    this.catFrame = 0
-    this.rodAngle = 0 // 鱼竿角度
-    
-    // 蓄力定时器
-    this.castTimer = null
+    this.isCasting = false // 是否正在蓄力
+    this.castTimer = null // 蓄力定时器
     
     // 鱼配置
     this.fishTypes = [
@@ -135,25 +128,26 @@ export default class Game {
     }
     
     // 鱼线状态（钓鱼大赢家模式）
-    if (this.lineState === 'casting') {
-      // 抛竿后鱼钩向水底移动
-      this.lineLength += this.lineSpeed
-      if (this.lineLength >= this.maxLineLength) {
-        this.lineLength = this.maxLineLength
-        this.lineState = 'reeling'
-        console.log('[鱼钩] 到达最远距离，自动收竿')
+    if (this.lineState === 'moving_out') {
+      // 鱼钩向目标距离移动
+      if (this.lineLength < this.targetLineLength) {
+        this.lineLength += this.lineSpeed
+        this.checkCollision()
+      } else {
+        // 到达目标距离，自动返回
+        this.lineState = 'moving_in'
+        console.log('[鱼钩] 到达目标距离，自动返回')
       }
-      this.checkCollision()
-    } else if (this.lineState === 'reeling') {
-      // 收竿 - 鱼钩返回
-      this.lineLength -= this.lineSpeed * 2.5
+    } else if (this.lineState === 'moving_in') {
+      // 鱼钩返回
+      this.lineLength -= this.lineSpeed * 2
       if (this.lineLength <= 50) {
         this.lineLength = 50
         this.lineState = 'idle'
         if (this.caughtFish) {
           this.score += this.caughtFish.type.score
           this.caught++
-          console.log('[得分] +', this.caughtFish.type.score, '总分:', this.score, '钓到:', this.caught)
+          console.log('[得分] +', this.caughtFish.type.score, '总分:', this.score)
           this.caughtFish = null
         }
       }
@@ -207,7 +201,7 @@ export default class Game {
         fish.hooked = true
         fish.caught = true
         this.caughtFish = fish
-        this.lineState = 'reeling'
+        this.lineState = 'moving_in' // 钓到后直接返回
         console.log('[钓鱼] 钓到:', fish.type.name, fish.type.rarity)
         break
       }
@@ -242,22 +236,15 @@ export default class Game {
       
       // 钓鱼大赢家模式：长按蓄力抛竿
       if (this.lineState === 'idle') {
-        console.log('[钓鱼] 开始蓄力 - 状态检查：idle=true')
+        console.log('[钓鱼] 开始蓄力')
         this.isCasting = true
         this.castPower = 0
-        this.castStartTime = Date.now()
         
-        // 启动蓄力定时器（不需要移动手指）
+        // 启动蓄力定时器
         if (this.castTimer) clearInterval(this.castTimer)
         this.castTimer = setInterval(() => {
-          this.castPower = Math.min(this.castPower + 2, 100) // 每帧 +2%，50 帧满力
-          console.log('[蓄力] 力度:', this.castPower, '%')
+          this.castPower = Math.min(this.castPower + 1.5, 100) // 每秒 30%，约 3 秒满力
         }, 50)
-      } else if (this.lineState === 'casting') {
-        // 再次点击：收竿
-        console.log('[钓鱼] 手动收竿')
-        this.lineState = 'reeling'
-        this.isCasting = false
       }
     })
     
@@ -267,7 +254,7 @@ export default class Game {
     })
     
     wx.onTouchEnd(() => {
-      console.log('[TouchEnd] 蓄力:', this.isCasting, '状态:', this.lineState, '力度:', this.castPower)
+      console.log('[TouchEnd] 蓄力:', this.isCasting, '力度:', this.castPower)
       
       // 停止蓄力定时器
       if (this.castTimer) {
@@ -275,16 +262,13 @@ export default class Game {
         this.castTimer = null
       }
       
-      // 松开手指：抛竿
+      // 松开手指：抛出鱼钩
       if (this.isCasting && this.lineState === 'idle') {
-        console.log('[钓鱼] 抛竿！力度:', this.castPower)
-        this.lineState = 'casting'
+        const power = Math.max(this.castPower, 10) // 至少 10%
+        this.targetLineLength = 50 + (power / 100) * (this.maxLineLength - 50)
+        this.lineState = 'moving_out' // 鱼钩向外移动
         this.isCasting = false
-        
-        // 根据力度设置初始鱼线长度
-        const power = Math.max(this.castPower, 10) // 至少 10% 力度
-        this.lineLength = 50 + (power / 100) * (this.maxLineLength - 50)
-        console.log('[钓鱼] 初始鱼线长度:', this.lineLength)
+        console.log('[钓鱼] 抛竿！力度:', power, '目标距离:', this.targetLineLength)
       }
     })
     
@@ -370,7 +354,8 @@ export default class Game {
     this.caught = 0
     this.fishes = []
     this.caughtFish = null
-    this.lineLength = 0
+    this.lineLength = 50
+    this.targetLineLength = 50
     this.lineState = 'idle'
     this.hookX = this.width / 2
     this.hookTargetX = this.width / 2
@@ -426,8 +411,8 @@ export default class Game {
     ctx.fillStyle = '#fff'
     ctx.font = '18px Arial'
     ctx.fillText('滑动左右移动猫咪', this.width / 2, this.height / 3)
-    ctx.fillText('长按蓄力，松手甩竿', this.width / 2, this.height / 3 + 35)
-    ctx.fillText('鱼钩自动返回', this.width / 2, this.height / 3 + 65)
+    ctx.fillText('长按蓄力，松手抛竿', this.width / 2, this.height / 3 + 35)
+    ctx.fillText('力度越大抛得越远', this.width / 2, this.height / 3 + 65)
     
     ctx.fillStyle = '#4ECDC4'
     ctx.fillRect(this.width / 2 - 80, this.height / 2, 160, 55)
