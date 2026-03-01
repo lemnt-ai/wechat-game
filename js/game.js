@@ -183,8 +183,9 @@ export default class Game {
       const fish = this.fishes[i]
       
       if (fish.caught) {
+        const lineStartY = this.boatY - 60
         fish.x = this.hookX
-        fish.y = this.hookY - this.lineLength + 30
+        fish.y = lineStartY + this.lineLength + 30
         continue
       }
       
@@ -210,7 +211,8 @@ export default class Game {
   
   // 检查碰撞
   checkCollision() {
-    const hookY = this.hookY - this.lineLength
+    const lineStartY = this.boatY - 60
+    const hookY = lineStartY + this.lineLength
     
     for (let i = 0; i < this.fishes.length; i++) {
       const fish = this.fishes[i]
@@ -565,22 +567,25 @@ export default class Game {
     ctx.moveTo(lineStartX, lineStartY)
     
     if (this.lineState === 'moving_out') {
-      ctx.lineTo(this.hookX, lineStartY - this.lineLength)
+      // 鱼钩向下沉
+      ctx.lineTo(this.hookX, lineStartY + this.lineLength)
     } else if (this.lineState === 'moving_in') {
+      // 收回时摆动
       ctx.quadraticCurveTo(
-        this.hookX + 20, lineStartY - this.lineLength / 2,
-        this.hookX, lineStartY - this.lineLength
+        this.hookX + 20, lineStartY + this.lineLength / 2,
+        this.hookX, lineStartY + this.lineLength
       )
     } else {
+      // 空闲时自然下垂
       ctx.quadraticCurveTo(
-        lineStartX + 10, lineStartY - 30,
-        this.hookX, lineStartY - 50
+        lineStartX + 10, lineStartY + 30,
+        this.hookX, lineStartY + 50
       )
     }
     ctx.stroke()
     
     // 鱼钩
-    const hookY = lineStartY - this.lineLength
+    const hookY = lineStartY + this.lineLength
     ctx.strokeStyle = '#666'
     ctx.lineWidth = 2
     ctx.beginPath()
