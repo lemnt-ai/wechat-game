@@ -26,14 +26,14 @@ export default class Game {
     
     // 鱼钩 - 炮台在底部
     this.hookX = this.width / 2
-    this.hookY = this.height - 80  // 底部位置
+    this.hookY = this.height - 50  // 底部位置
     this.hookTargetX = this.width / 2
     
     // 鱼线 - 钓鱼大赢家模式
-    this.lineLength = 50 // 初始长度（鱼钩在猫咪面前）
-    this.targetLineLength = 50 // 目标长度（蓄力决定）
-    this.maxLineLength = 400 // 最大长度
-    this.lineSpeed = 15 // 鱼钩移动速度
+    this.lineLength = 30 // 初始长度（鱼钩在猫咪面前）
+    this.targetLineLength = 30 // 目标长度（蓄力决定）
+    this.maxLineLength = 600 // 最大长度（增加，让鱼钩能到顶部）
+    this.lineSpeed = 18 // 鱼钩移动速度（加快）
     this.lineState = 'idle' // idle, moving_out, moving_in
     this.castPower = 0 // 抛竿力度 0-100
     this.isCasting = false // 是否正在蓄力
@@ -70,7 +70,7 @@ export default class Game {
     this.render()
   }
   
-  // 生成鱼（鱼在水面区域：顶部 1/3 区域）
+  // 生成鱼（鱼在水面区域：中间区域）
   spawnFish() {
     const rand = Math.random()
     let typeIndex
@@ -85,7 +85,7 @@ export default class Game {
     
     const fish = {
       x: fromLeft ? -50 : this.width + 50,
-      y: 80 + Math.random() * (this.height * 0.35),  // 鱼在顶部 35% 区域
+      y: 150 + Math.random() * (this.height * 0.5),  // 鱼在中间 50% 区域
       type: type,
       direction: fromLeft ? 1 : -1,
       caught: false,
@@ -93,7 +93,7 @@ export default class Game {
     }
     
     this.fishes.push(fish)
-    console.log('[鱼] 生成:', type.name, type.rarity)
+    console.log('[鱼] 生成:', type.name, 'Y:', fish.y)
   }
   
   // 更新
@@ -265,7 +265,7 @@ export default class Game {
       // 松开手指：抛出鱼钩
       if (this.isCasting && this.lineState === 'idle') {
         const power = Math.max(this.castPower, 10) // 至少 10%
-        this.targetLineLength = 50 + (power / 100) * (this.maxLineLength - 50)
+        this.targetLineLength = 30 + (power / 100) * (this.maxLineLength - 30)
         this.lineState = 'moving_out' // 鱼钩向外移动
         this.isCasting = false
         console.log('[钓鱼] 抛竿！力度:', power, '目标距离:', this.targetLineLength)
@@ -434,19 +434,19 @@ export default class Game {
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, this.width, this.height)
     
-    // 水面线（顶部 1/3 处）
+    // 水面线（顶部）
     ctx.strokeStyle = 'rgba(255,255,255,0.4)'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(0, this.height * 0.35)
-    ctx.lineTo(this.width, this.height * 0.35)
+    ctx.moveTo(0, 100)
+    ctx.lineTo(this.width, 100)
     ctx.stroke()
     
     // 水波纹
     ctx.strokeStyle = 'rgba(255,255,255,0.2)'
     ctx.lineWidth = 1
-    for (let i = 0; i < 3; i++) {
-      const y = this.height * 0.35 + 15 + i * 10
+    for (let i = 0; i < 5; i++) {
+      const y = 115 + i * 12
       ctx.beginPath()
       ctx.moveTo(0, y)
       ctx.lineTo(this.width, y)
@@ -479,7 +479,7 @@ export default class Game {
     // 抛竿力度条（钓鱼大赢家特色）
     this.renderCastPower(ctx)
     
-    // 猫咪和鱼竿（底部）
+    // 猫咪和鱼竿（底部，往上一些）
     this.renderCatAndRod(ctx)
     
     // 所有的鱼
