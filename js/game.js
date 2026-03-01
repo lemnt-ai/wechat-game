@@ -5,12 +5,31 @@
 export default class Game {
   constructor(adManager) {
     this.adManager = adManager
-    this.canvas = wx.getSystemInfoSync().canvas
-    this.ctx = this.canvas.getContext('2d')
+    
+    // 获取系统信息
+    this.systemInfo = wx.getSystemInfoSync()
+    console.log('系统信息:', this.systemInfo)
     
     // 屏幕尺寸
-    this.width = this.canvas.width
-    this.height = this.canvas.height
+    this.width = this.systemInfo.windowWidth
+    this.height = this.systemInfo.windowHeight
+    
+    // 获取 Canvas
+    this.canvas = this.systemInfo.canvas
+    if (this.canvas) {
+      this.ctx = this.canvas.getContext('2d')
+      // 设置 Canvas 尺寸
+      if (this.canvas.width !== this.width) {
+        this.canvas.width = this.width
+      }
+      if (this.canvas.height !== this.height) {
+        this.canvas.height = this.height
+      }
+      console.log('Canvas 尺寸:', this.canvas.width, this.canvas.height)
+    } else {
+      console.warn('未找到 Canvas')
+      this.ctx = null
+    }
     
     // 游戏状态
     this.state = 'menu' // menu, playing, paused, gameover
@@ -40,8 +59,8 @@ export default class Game {
     // 选中状态
     this.selectedCell = null
     
-    // 绑定事件
-    this.bindEvents()
+    // 触摸起始位置
+    this.touchStartPos = null
   }
   
   // 初始化网格
@@ -96,15 +115,31 @@ export default class Game {
   
   // 绑定触摸事件
   bindEvents() {
-    this.canvas.addEventListener('touchstart', (e) => {
-      if (this.state !== 'playing') return
+    console.log('绑定事件...')
+    
+    // 使用 wx.onTouchStart
+    wx.onTouchStart((res) => {
+      if (this.state !== 'playing') {
+        // 菜单状态下点击开始游戏
+        if (this.state === 'menu') {
+          this.startGame()
+        } else if (this.state === 'gameover') {
+          // 游戏结束状态下看广告复活
+          this.adManager.showRewardedAd()
+        }
+        return
+      }
       
-      const touch = e.touches[0]
+      const touch = res.touches[0]
       const x = touch.clientX
       const y = touch.clientY
       
+      this.touchStartPos = { x, y }
+      
       const col = Math.floor((x - this.offsetX) / this.cellSize)
       const row = Math.floor((y - this.offsetY) / this.cellSize)
+      
+      console.log('触摸位置:', row, col)
       
       if (row >= 0 && row < this.gridSize && col >= 0 && col < this.gridSize) {
         if (this.selectedCell) {
@@ -114,8 +149,39 @@ export default class Game {
         } else {
           this.selectedCell = { row, col }
         }
+        this.render()
       }
     })
+    
+    // 使用 wx.onTouchEnd
+    wx.onTouchEnd((res) => {
+      if (!this.touchStartPos) return
+      
+      const touch = res.changedTouches[0]
+      const x = touch.clientX
+      const y = touch.clientY
+      
+      const startCol = Math.floor((this.touchStartPos.x - this.offsetX) / this.cellSize)
+      const startRow = Math.floor((this.touchStartPos.y - this.offsetY) / this.cellSize)
+      const endCol = Math.floor((x - this.offsetX) / this.cellSize)
+      const endRow = Math.floor((y - this.offsetY) / this.cellSize)
+      
+      // 滑动检测
+      if (startRow >= 0 && startRow < this.gridSize && startCol >= 0 && startCol < this.gridSize) {
+        const dr = Math.abs(endRow - startRow)
+        const dc = Math.abs(endCol - startCol)
+        
+        if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
+          this.trySwap({ row: startRow, col: startCol }, { row: endRow, col: endCol })
+        }
+      }
+      
+      this.touchStartPos = null
+      this.selectedCell = null
+      this.render()
+    })
+    
+    console.log('事件绑定完成')
   }
   
   // 尝试交换
@@ -210,6 +276,14 @@ export default class Game {
   
   // 开始游戏
   start() {
+    console.log('游戏启动...')
+    this.state = 'menu'
+    this.render()
+  }
+  
+  // 开始游戏（从菜单）
+  startGame() {
+    console.log('开始新游戏')
     this.state = 'playing'
     this.score = 0
     this.level = 1
@@ -229,6 +303,11 @@ export default class Game {
   
   // 渲染
   render() {
+    if (!this.ctx) {
+      console.warn('Canvas 上下文为空，无法渲染')
+      return
+    }
+    
     // 清空画布
     this.ctx.fillStyle = '#1a1a2e'
     this.ctx.fillRect(0, 0, this.width, this.height)
