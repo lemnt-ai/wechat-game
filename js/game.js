@@ -1,6 +1,6 @@
 /**
  * 欢乐钓鱼 - 参考 wow-fishing 重构版
- * 微信小游戏原生版本
+ * 微信小游戏原生版本 - 支持看广告加时间
  */
 
 export default class Game {
@@ -13,29 +13,29 @@ export default class Game {
     this.width = this.systemInfo.windowWidth
     this.height = this.systemInfo.windowHeight
     
-    // 游戏状态 - 参考原项目的状态机
-    this.state = 'menu' // menu, playing, casting, waiting, biting, reeling, gameover
+    // 游戏状态
+    this.state = 'menu'
     this.time = 180
     this.lastTime = Date.now()
     this.score = 0
     this.caught = 0
     
-    // 鱼钩 - 固定在顶部
+    // 广告相关
+    this.canShowAd = true
+    this.adCooldown = 0
+    
+    // 鱼钩
     this.hookX = this.width / 2
     this.hookY = 60
     this.hookTargetX = this.width / 2
     
-    // 鱼线 - 参考原项目的钓鱼状态
+    // 鱼线
     this.lineLength = 0
     this.maxLineLength = this.height - 100
     this.lineSpeed = 6
-    this.lineState = 'idle' // idle, dropping, pulling
+    this.lineState = 'idle'
     
-    // 鱼咬钩计时器
-    this.biteTimer = null
-    this.waitTime = 0
-    
-    // 鱼配置 - 参考原项目
+    // 鱼配置
     this.fishTypes = [
       { name: '小鱼', color: '#4ECDC4', score: 10, speed: 2, size: 25, rarity: 'common' },
       { name: '中鱼', color: '#45B7D1', score: 20, speed: 3, size: 35, rarity: 'common' },
@@ -49,8 +49,14 @@ export default class Game {
     this.spawnTimer = 0
     this.spawnInterval = 50
     
-    // 触摸
-    this.touchX = 0
+    // 设置广告回调
+    if (this.adManager) {
+      this.adManager.setCallback('onReward', (type) => {
+        if (type === 'extraTime') {
+          this.addTime(30)
+        }
+      })
+    }
   }
   
   // 初始化
@@ -60,16 +66,15 @@ export default class Game {
     this.render()
   }
   
-  // 生成鱼 - 参考原项目逻辑
+  // 生成鱼
   spawnFish() {
-    // 随机选择鱼的种类（ weighted random）
     const rand = Math.random()
     let typeIndex
-    if (rand < 0.4) typeIndex = 0  // 小鱼 40%
-    else if (rand < 0.7) typeIndex = 1  // 中鱼 30%
-    else if (rand < 0.85) typeIndex = 2  // 大鱼 15%
-    else if (rand < 0.95) typeIndex = 3  // 金鱼 10%
-    else typeIndex = 4  // 鲨鱼 5%
+    if (rand < 0.4) typeIndex = 0
+    else if (rand < 0.7) typeIndex = 1
+    else if (rand < 0.85) typeIndex = 2
+    else if (rand < 0.95) typeIndex = 3
+    else typeIndex = 4
     
     const type = this.fishTypes[typeIndex]
     const fromLeft = Math.random() > 0.5
@@ -87,7 +92,7 @@ export default class Game {
     console.log('[鱼] 生成:', type.name, type.rarity)
   }
   
-  // 更新 - 参考原项目的状态更新
+  // 更新
   update() {
     if (this.state !== 'playing') return
     
@@ -96,22 +101,33 @@ export default class Game {
     if (now - this.lastTime >= 1000) {
       this.time--
       this.lastTime = now
+      
+      // 广告冷却
+      if (this.adCooldown > 0) {
+        this.adCooldown--
+        if (this.adCooldown <= 0) {
+          this.canShowAd = true
+        }
+      }
+      
       if (this.time <= 0) {
+        this.time = 0
         this.state = 'gameover'
-        console.log('[游戏] 结束! 分数:', this.score)
+        console.log('[游戏] 结束！分数:', this.score)
         return
       }
     }
     
-    // 鱼钩左右移动
+    // 鱼钩移动
     if (Math.abs(this.hookX - this.hookTargetX) > 1) {
       this.hookX += (this.hookTargetX > this.hookX) ? 8 : -8
     }
     
-    // 鱼线状态更新
+    // 鱼线状态
     if (this.lineState === 'dropping') {
       this.lineLength += this.lineSpeed
       if (this.lineLength >= this.maxLineLength) {
+        this.lineLength = this.maxLineLength
         this.lineState = 'pulling'
         console.log('[鱼钩] 到达底部')
       }
@@ -147,16 +163,13 @@ export default class Game {
       const fish = this.fishes[i]
       
       if (fish.caught) {
-        // 被钓起的鱼跟随鱼钩
         fish.x = this.hookX
         fish.y = this.hookY + this.lineLength + 30
         continue
       }
       
-      // 移动
       fish.x += fish.type.speed * fish.direction
       
-      // 移除超出屏幕的
       if ((fish.direction === 1 && fish.x > this.width + 100) ||
           (fish.direction === -1 && fish.x < -100)) {
         this.fishes.splice(i, 1)
@@ -164,7 +177,7 @@ export default class Game {
     }
   }
   
-  // 检查碰撞 - 参考原项目
+  // 检查碰撞
   checkCollision() {
     const hookY = this.hookY + this.lineLength
     
@@ -176,7 +189,6 @@ export default class Game {
       const dy = Math.abs(fish.y - hookY)
       
       if (dx < fish.type.size && dy < fish.type.size + 10) {
-        // 钓到了!
         fish.hooked = true
         fish.caught = true
         this.caughtFish = fish
@@ -191,41 +203,107 @@ export default class Game {
   bindEvents() {
     console.log('[事件] 绑定')
     
-    // 触摸开始
     wx.onTouchStart((res) => {
       console.log('[TouchStart]')
       
       if (this.state === 'menu') {
-        console.log('[菜单] -> 开始游戏')
+        console.log('[菜单] 开始游戏')
         this.startGame()
         return
       }
       
       if (this.state === 'gameover') {
-        console.log('[结束] -> 重新开始')
+        console.log('[结束] 重新开始')
         this.startGame()
+        return
+      }
+      
+      // 检查是否点击了广告按钮
+      if (this.checkAdButton(res.touches[0].clientX, res.touches[0].clientY)) {
+        this.showTimeAd()
         return
       }
       
       // 放下鱼钩
       if (this.lineState === 'idle') {
-        console.log('[钓鱼] -> 放下鱼钩')
+        console.log('[钓鱼] 放下鱼钩')
         this.lineState = 'dropping'
       }
     })
     
-    // 触摸移动
     wx.onTouchMove((res) => {
       const touch = res.touches[0]
       this.hookTargetX = touch.clientX
     })
     
-    // 触摸结束
     wx.onTouchEnd(() => {
       console.log('[TouchEnd]')
     })
     
     console.log('[事件] 完成')
+  }
+  
+  // 检查广告按钮点击
+  checkAdButton(x, y) {
+    if (this.state !== 'playing') return false
+    if (!this.canShowAd) return false
+    
+    // 广告按钮位置：右上角
+    const btnX = this.width - 100
+    const btnY = 55
+    const btnWidth = 90
+    const btnHeight = 35
+    
+    return (x >= btnX && x <= btnX + btnWidth && y >= btnY && y <= btnY + btnHeight)
+  }
+  
+  // 显示时间广告
+  showTimeAd() {
+    console.log('[广告] 请求 +30 秒广告')
+    
+    if (!this.canShowAd) {
+      console.log('[广告] 冷却中，剩余:', this.adCooldown, '秒')
+      return
+    }
+    
+    if (this.adManager && this.adManager.showRewardedAd) {
+      this.adManager.showRewardedAd('extraTime')
+      this.canShowAd = false
+      this.adCooldown = 60 // 60 秒冷却
+    }
+  }
+  
+  // 添加时间
+  addTime(seconds) {
+    this.time += seconds
+    console.log('[时间] +', seconds, '秒，当前:', this.time, '秒')
+    
+    // 显示提示
+    this.showTimeToast('+30 秒!')
+  }
+  
+  // 显示时间提示
+  showTimeToast(text) {
+    const toastY = this.height / 2
+    const toastX = this.width / 2
+    let alpha = 1
+    
+    const showAnimation = () => {
+      if (alpha <= 0) return
+      
+      this.ctx.save()
+      this.ctx.globalAlpha = alpha
+      this.ctx.fillStyle = '#4ECDC4'
+      this.ctx.font = 'bold 48px Arial'
+      this.ctx.textAlign = 'center'
+      this.ctx.fillText(text, toastX, toastY)
+      this.ctx.restore()
+      
+      alpha -= 0.05
+      setTimeout(showAnimation, 50)
+    }
+    
+    showAnimation()
   }
   
   // 开始
@@ -250,6 +328,8 @@ export default class Game {
     this.hookTargetX = this.width / 2
     this.spawnTimer = 0
     this.lastTime = Date.now()
+    this.canShowAd = true
+    this.adCooldown = 0
   }
   
   // 游戏循环
@@ -314,14 +394,24 @@ export default class Game {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
     ctx.fillRect(0, 0, this.width, 50)
     
-    ctx.fillStyle = '#fff'
-    ctx.font = '16px Arial'
+    // 时间
+    ctx.fillStyle = this.time < 30 ? '#ff6b6b' : '#fff'
+    ctx.font = 'bold 18px Arial'
     ctx.textAlign = 'left'
     ctx.fillText('时间:' + this.time + 's', 12, 32)
+    
+    // 分数
+    ctx.fillStyle = '#fff'
+    ctx.font = '16px Arial'
     ctx.textAlign = 'center'
     ctx.fillText('分数:' + this.score, this.width / 2, 32)
+    
+    // 钓到数量
     ctx.textAlign = 'right'
     ctx.fillText('钓到:' + this.caught, this.width - 12, 32)
+    
+    // 广告按钮（右上角）
+    this.renderAdButton()
     
     // 鱼钩支架
     ctx.fillStyle = '#8B4513'
@@ -353,6 +443,29 @@ export default class Game {
         this.drawFish(fish, fish.x, fish.y)
       }
     })
+  }
+  
+  // 渲染广告按钮
+  renderAdButton() {
+    const ctx = this.ctx
+    
+    if (!this.canShowAd) {
+      // 冷却中
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'
+      ctx.fillRect(this.width - 100, 55, 90, 35)
+      ctx.fillStyle = '#999'
+      ctx.font = '14px Arial'
+      ctx.textAlign = 'center'
+      ctx.fillText(this.adCooldown + '秒后', this.width - 55, 78)
+    } else {
+      // 可用
+      ctx.fillStyle = '#FFD700'
+      ctx.fillRect(this.width - 100, 55, 90, 35)
+      ctx.fillStyle = '#000'
+      ctx.font = 'bold 14px Arial'
+      ctx.textAlign = 'center'
+      ctx.fillText('+30 秒', this.width - 55, 78)
+    }
   }
   
   // 绘制鱼
