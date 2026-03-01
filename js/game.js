@@ -680,19 +680,19 @@ export default class Game {
   
   // 渲染炮台
   renderRod(ctx, catX, catY) {
-    const炮台 X = catX
-    const炮台 Y = catY
+    const turretX = catX
+    const turretY = catY
     
     // 炮台根据状态旋转
-    let炮台角度 = -Math.PI / 2 // 默认向上
+    let turretAngle = -Math.PI / 2 // 默认向上
     if (this.lineState === 'moving_out') {
-      炮台角度 = -Math.PI / 2 - 0.2 // 抛出时略微向后
+      turretAngle = -Math.PI / 2 - 0.2 // 抛出时略微向后
     } else if (this.lineState === 'moving_in') {
-      炮台角度 = -Math.PI / 2 + 0.1 // 收回时向前
+      turretAngle = -Math.PI / 2 + 0.1 // 收回时向前
     }
     
     ctx.save()
-    ctx.translate(炮台 X, 炮台 Y)
+    ctx.translate(turretX, turretY)
     
     // 1. 炮台底座
     ctx.fillStyle = '#696969'
@@ -713,7 +713,7 @@ export default class Game {
     
     // 2. 旋转基座
     ctx.save()
-    ctx.rotate(炮台角度 + Math.PI / 2)
+    ctx.rotate(turretAngle + Math.PI / 2)
     
     ctx.fillStyle = '#808080'
     ctx.beginPath()
@@ -729,12 +729,12 @@ export default class Game {
     }
     
     // 3. 炮管（主炮筒）
-    const炮管 Gradient = ctx.createLinearGradient(0, -40, 0, -120)
-    炮管 Gradient.addColorStop(0, '#708090')
-    炮管 Gradient.addColorStop(0.5, '#607080')
-    炮管 Gradient.addColorStop(1, '#506070')
+    const barrelGradient = ctx.createLinearGradient(0, -40, 0, -120)
+    barrelGradient.addColorStop(0, '#708090')
+    barrelGradient.addColorStop(0.5, '#607080')
+    barrelGradient.addColorStop(1, '#506070')
     
-    ctx.fillStyle = 炮管 Gradient
+    ctx.fillStyle = barrelGradient
     ctx.beginPath()
     ctx.rect(-12, -120, 24, 90)
     ctx.fill()
@@ -769,8 +769,8 @@ export default class Game {
     ctx.restore()
     
     // 5. 鱼线（从炮口伸出）
-    const tipX = 炮台 X + Math.cos(炮台角度) * 120
-    const tipY = 炮台 Y + Math.sin(炮台角度) * 120
+    const tipX = turretX + Math.cos(turretAngle) * 120
+    const tipY = turretY + Math.sin(turretAngle) * 120
     
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
     ctx.lineWidth = 1.5
