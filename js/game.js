@@ -22,7 +22,7 @@ export default class Game {
     
     // 船和渔夫在水面
     this.boatX = this.width / 2
-    this.boatY = 275  // 船在水面位置 (250-300px 之间)
+    this.boatY = 375  // 船在水面位置 (350-400px 之间)
     this.hookX = this.width / 2
     this.hookY = this.boatY
     this.hookTargetX = this.width / 2
@@ -90,7 +90,7 @@ export default class Game {
     
     const fish = {
       x: fromLeft ? -50 : this.width + 50,
-      y: 350 + Math.random() * (this.height - 500),  // 鱼在 350px 到海底之间
+      y: 450 + Math.random() * (this.height - 600),  // 鱼在 450px 到海底之间
       type: type,
       direction: fromLeft ? 1 : -1,
       caught: false,
@@ -363,25 +363,25 @@ export default class Game {
   // 渲染背景（海底世界）
   renderBackground() {
     const ctx = this.ctx
-    const skyBottomY = 250  // 天空底部 (增加 100px)
-    const waterSurfaceY = 300  // 水面位置 (增加 100px)
+    const skyBottomY = 350  // 天空底部 (再增加 100px)
+    const waterSurfaceY = 400  // 水面位置 (再增加 100px)
     const seaBottomY = this.height - 100  // 海底位置
     
-    // 1. 天空区域 (0 - 250px)
+    // 1. 天空区域 (0 - 350px)
     const skyGradient = ctx.createLinearGradient(0, 0, 0, skyBottomY)
     skyGradient.addColorStop(0, '#87CEEB')
     skyGradient.addColorStop(1, '#E0F6FF')
     ctx.fillStyle = skyGradient
     ctx.fillRect(0, 0, this.width, skyBottomY)
     
-    // 云朵（位置下调）
+    // 云朵（位置更高）
     ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    this.renderCloud(ctx, 100, 80, 40)
-    this.renderCloud(ctx, 160, 90, 45)
-    this.renderCloud(ctx, this.width - 180, 100, 50)
-    this.renderCloud(ctx, this.width - 100, 80, 40)
+    this.renderCloud(ctx, 120, 100, 45)
+    this.renderCloud(ctx, 190, 120, 50)
+    this.renderCloud(ctx, this.width - 200, 130, 55)
+    this.renderCloud(ctx, this.width - 120, 100, 45)
     
-    // 2. 水面区域 (250 - 300px)
+    // 2. 水面区域 (350 - 400px)
     const surfaceGradient = ctx.createLinearGradient(0, skyBottomY, 0, waterSurfaceY)
     surfaceGradient.addColorStop(0, '#00BFFF')
     surfaceGradient.addColorStop(1, '#1E90FF')
@@ -391,15 +391,15 @@ export default class Game {
     // 水波纹
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'
     ctx.lineWidth = 2
-    for (let i = 0; i < 12; i++) {
-      const x = i * 70
+    for (let i = 0; i < 15; i++) {
+      const x = i * 55
       ctx.beginPath()
       ctx.moveTo(x, skyBottomY + 25)
       ctx.quadraticCurveTo(x + 20, skyBottomY + 20, x + 40, skyBottomY + 25)
       ctx.stroke()
     }
     
-    // 3. 水下区域 (300px - 海底)
+    // 3. 水下区域 (400px - 海底)
     const waterGradient = ctx.createLinearGradient(0, waterSurfaceY, 0, seaBottomY)
     waterGradient.addColorStop(0, '#1E90FF')
     waterGradient.addColorStop(0.5, '#006994')
