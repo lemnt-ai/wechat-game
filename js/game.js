@@ -15,7 +15,7 @@ export default class Game {
     
     // 游戏状态
     this.state = 'menu' // menu, playing, gameover
-    this.time = 60
+    this.time = 180  // 3 分钟
     this.score = 0
     this.caught = 0
     
