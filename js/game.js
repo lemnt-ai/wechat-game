@@ -24,9 +24,9 @@ export default class Game {
     this.canShowAd = true
     this.adCooldown = 0
     
-    // 鱼钩
+    // 鱼钩 - 炮台在底部
     this.hookX = this.width / 2
-    this.hookY = 60
+    this.hookY = this.height - 80  // 底部位置
     this.hookTargetX = this.width / 2
     
     // 鱼线
@@ -66,7 +66,7 @@ export default class Game {
     this.render()
   }
   
-  // 生成鱼
+  // 生成鱼（鱼在水面区域：顶部）
   spawnFish() {
     const rand = Math.random()
     let typeIndex
@@ -81,7 +81,7 @@ export default class Game {
     
     const fish = {
       x: fromLeft ? -50 : this.width + 50,
-      y: 120 + Math.random() * (this.height - 200),
+      y: 100 + Math.random() * (this.height - 300),  // 鱼在顶部水面区域
       type: type,
       direction: fromLeft ? 1 : -1,
       caught: false,
@@ -123,13 +123,13 @@ export default class Game {
       this.hookX += (this.hookTargetX > this.hookX) ? 8 : -8
     }
     
-    // 鱼线状态
+    // 鱼线状态（向上抛竿）
     if (this.lineState === 'dropping') {
       this.lineLength += this.lineSpeed
       if (this.lineLength >= this.maxLineLength) {
         this.lineLength = this.maxLineLength
         this.lineState = 'pulling'
-        console.log('[鱼钩] 到达底部')
+        console.log('[鱼钩] 到达水面')
       }
       this.checkCollision()
     } else if (this.lineState === 'pulling') {
@@ -177,9 +177,9 @@ export default class Game {
     }
   }
   
-  // 检查碰撞
+  // 检查碰撞（鱼钩位置：底部向上）
   checkCollision() {
-    const hookY = this.hookY + this.lineLength
+    const hookY = this.hookY - 20 - this.lineLength
     
     for (let i = 0; i < this.fishes.length; i++) {
       const fish = this.fishes[i]
@@ -383,12 +383,22 @@ export default class Game {
   renderGame() {
     const ctx = this.ctx
     
-    // 背景渐变
+    // 背景渐变（天空到水）
     const gradient = ctx.createLinearGradient(0, 0, 0, this.height)
-    gradient.addColorStop(0, '#87CEEB')
-    gradient.addColorStop(1, '#1E90FF')
+    gradient.addColorStop(0, '#87CEEB')  // 天空
+    gradient.addColorStop(0.5, '#E0F6FF')  // 天空
+    gradient.addColorStop(0.5, '#1E90FF')  // 水面
+    gradient.addColorStop(1, '#006994')  // 深水
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, this.width, this.height)
+    
+    // 水面线
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(0, this.height * 0.5)
+    ctx.lineTo(this.width, this.height * 0.5)
+    ctx.stroke()
     
     // 顶部信息栏
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
@@ -410,31 +420,40 @@ export default class Game {
     ctx.textAlign = 'right'
     ctx.fillText('钓到:' + this.caught, this.width - 12, 32)
     
-    // 广告按钮（右上角）
+    // 广告按钮（左上角）
     this.renderAdButton()
     
-    // 鱼钩支架
+    // 炮台（底部）
     ctx.fillStyle = '#8B4513'
-    ctx.fillRect(this.hookX - 3, 0, 6, this.hookY)
+    ctx.fillRect(this.hookX - 20, this.hookY, 40, 60)
     
-    // 鱼线
+    // 炮台底座
+    ctx.fillStyle = '#654321'
+    ctx.beginPath()
+    ctx.moveTo(this.hookX - 30, this.hookY + 60)
+    ctx.lineTo(this.hookX + 30, this.hookY + 60)
+    ctx.lineTo(this.hookX, this.hookY + 40)
+    ctx.closePath()
+    ctx.fill()
+    
+    // 鱼线（向上）
     ctx.strokeStyle = '#fff'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(this.hookX, this.hookY)
-    ctx.lineTo(this.hookX, this.hookY + this.lineLength)
+    ctx.moveTo(this.hookX, this.hookY - 20)
+    ctx.lineTo(this.hookX, this.hookY - 20 - this.lineLength)
     ctx.stroke()
     
     // 鱼钩
     ctx.strokeStyle = '#666'
     ctx.lineWidth = 3
     ctx.beginPath()
-    ctx.arc(this.hookX, this.hookY + this.lineLength, 12, 0, Math.PI, false)
+    ctx.arc(this.hookX, this.hookY - 20 - this.lineLength, 12, 0, Math.PI, true)
     ctx.stroke()
     
     // 钓到的鱼
     if (this.caughtFish) {
-      this.drawFish(this.caughtFish, this.hookX, this.hookY + this.lineLength + 30)
+      this.drawFish(this.caughtFish, this.hookX, this.hookY - 20 - this.lineLength - 30)
     }
     
     // 所有的鱼
@@ -445,26 +464,26 @@ export default class Game {
     })
   }
   
-  // 渲染广告按钮
+  // 渲染广告按钮（左上角，避免和炮台冲突）
   renderAdButton() {
     const ctx = this.ctx
     
     if (!this.canShowAd) {
       // 冷却中
       ctx.fillStyle = 'rgba(0,0,0,0.5)'
-      ctx.fillRect(this.width - 100, 55, 90, 35)
+      ctx.fillRect(10, 55, 90, 35)
       ctx.fillStyle = '#999'
       ctx.font = '14px Arial'
       ctx.textAlign = 'center'
-      ctx.fillText(this.adCooldown + '秒后', this.width - 55, 78)
+      ctx.fillText(this.adCooldown + '秒后', 55, 78)
     } else {
       // 可用
       ctx.fillStyle = '#FFD700'
-      ctx.fillRect(this.width - 100, 55, 90, 35)
+      ctx.fillRect(10, 55, 90, 35)
       ctx.fillStyle = '#000'
       ctx.font = 'bold 14px Arial'
       ctx.textAlign = 'center'
-      ctx.fillText('+30 秒', this.width - 55, 78)
+      ctx.fillText('+30 秒', 55, 78)
     }
   }
   
