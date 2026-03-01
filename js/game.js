@@ -217,7 +217,7 @@ export default class Game {
     
     wx.onTouchStart((res) => {
       const touch = res.touches[0]
-      console.log('[TouchStart]', touch.clientX, touch.clientY)
+      console.log('[TouchStart]', touch.clientX, touch.clientY, '状态:', this.lineState)
       
       if (this.state === 'menu') {
         console.log('[菜单] 开始游戏')
@@ -237,15 +237,15 @@ export default class Game {
         return
       }
       
-      // 钓鱼大赢家模式：点击蓄力抛竿
+      // 钓鱼大赢家模式：长按蓄力抛竿
       if (this.lineState === 'idle') {
-        console.log('[钓鱼] 开始蓄力')
+        console.log('[钓鱼] 开始蓄力 - 状态检查：idle=true')
         this.isCasting = true
         this.castPower = 0
         this.castStartTime = Date.now()
       } else if (this.lineState === 'casting') {
         // 再次点击：收竿
-        console.log('[钓鱼] 收竿')
+        console.log('[钓鱼] 手动收竿')
         this.lineState = 'reeling'
         this.isCasting = false
       }
@@ -258,21 +258,24 @@ export default class Game {
       // 蓄力中：显示力度条
       if (this.isCasting && this.lineState === 'idle') {
         const elapsed = Date.now() - this.castStartTime
-        this.castPower = Math.min(elapsed / 20, 100) // 2 秒满力
+        this.castPower = Math.min(elapsed / 30, 100) // 3 秒满力
+        console.log('[蓄力] 力度:', this.castPower.toFixed(1), '%')
       }
     })
     
     wx.onTouchEnd(() => {
-      console.log('[TouchEnd]')
+      console.log('[TouchEnd] 蓄力:', this.isCasting, '状态:', this.lineState)
       
       // 松开手指：抛竿
       if (this.isCasting && this.lineState === 'idle') {
-        console.log('[钓鱼] 抛竿！力度:', this.castPower)
+        console.log('[钓鱼] 抛竿！力度:', this.castPower.toFixed(1))
         this.lineState = 'casting'
         this.isCasting = false
         
         // 根据力度设置初始鱼线长度
-        this.lineLength = 50 + (this.castPower / 100) * (this.maxLineLength - 50)
+        const power = Math.max(this.castPower, 10) // 至少 10% 力度
+        this.lineLength = 50 + (power / 100) * (this.maxLineLength - 50)
+        console.log('[钓鱼] 初始鱼线长度:', this.lineLength)
       }
     })
     
