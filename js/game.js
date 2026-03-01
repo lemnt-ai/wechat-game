@@ -1,6 +1,6 @@
 /**
- * 大家来找茬 - 微信小游戏
- * 找出两张图片之间的差异
+ * 欢乐钓鱼 - 微信小游戏
+ * 控制鱼钩左右移动，点击放下鱼钩钓鱼
  */
 
 export default class Game {
@@ -14,191 +14,202 @@ export default class Game {
     this.width = this.systemInfo.windowWidth
     this.height = this.systemInfo.windowHeight
     
-    console.log('[找茬] 初始化:', this.width, 'x', this.height)
+    console.log('[钓鱼] 初始化:', this.width, 'x', this.height)
     
     // 游戏状态
     this.state = 'menu' // menu, playing, gameover
-    this.level = 1
-    this.maxLevel = 5
+    this.time = 60 // 游戏时间（秒）
+    this.lastTime = Date.now()
     
-    // 差异点配置
-    this.diffCount = 3 // 每关差异数量
-    this.foundDiffs = [] // 已找到的差异
-    this.markedDiffs = [] // 已标记的差异位置
+    // 分数
+    this.score = 0
+    this.caught = 0 // 钓到的鱼数量
     
-    // 图片区域配置
-    this.padding = 20
-    this.gap = 10
-    this.imageWidth = (this.width - this.padding * 3 - this.gap) / 2
-    this.imageHeight = this.imageWidth
+    // 鱼钩配置
+    this.hookX = this.width / 2
+    this.hookY = 80
+    this.hookWidth = 40
+    this.hookSpeed = 8
+    this.hookDirection = 0 // -1 左，0 停，1 右
     
-    // 差异点数据（简化版：用色块表示图片）
-    this.differences = []
+    // 鱼线
+    this.lineY = 80
+    this.lineSpeed = 5
+    this.lineState = 'idle' // idle, dropping, pulling
     
-    // 触摸相关
-    this.lastTapTime = 0
+    // 鱼的配置
+    this.fishTypes = [
+      { name: '小鱼', color: '#4ECDC4', score: 10, speed: 2, size: 20 },
+      { name: '中鱼', color: '#45B7D1', score: 20, speed: 3, size: 30 },
+      { name: '大鱼', color: '#FF6B6B', score: 30, speed: 1.5, size: 40 },
+      { name: '金魚', color: '#FFD700', score: 50, speed: 4, size: 25 },
+      { name: '鲨鱼', color: '#6c5ce7', score: 100, speed: 2.5, size: 50 }
+    ]
+    
+    this.fishes = []
+    this.caughtFish = null // 当前钓到的鱼
+    
+    // 生成鱼的间隔
+    this.spawnInterval = 1500
+    this.lastSpawn = 0
+    
+    // 触摸
+    this.touchStartX = 0
   }
   
-  // 生成差异点
-  generateDifferences() {
-    this.differences = []
-    this.foundDiffs = []
-    this.markedDiffs = []
+  // 生成鱼
+  spawnFish() {
+    const type = this.fishTypes[Math.floor(Math.random() * this.fishTypes.length)]
+    const fromLeft = Math.random() > 0.5
     
-    // 随机生成差异点位置
-    for (let i = 0; i < this.diffCount; i++) {
-      let diff
-      let attempts = 0
-      do {
-        diff = {
-          x: Math.random() * (this.imageWidth - 40) + 20,
-          y: Math.random() * (this.imageHeight - 40) + 20,
-          radius: 15 + Math.random() * 10,
-          found: false
-        }
-        attempts++
-      } while (
-        attempts < 50 &&
-        this.differences.some(d => 
-          Math.abs(d.x - diff.x) < 50 && Math.abs(d.y - diff.y) < 50
-        )
-      )
-      this.differences.push(diff)
+    this.fishes.push({
+      x: fromLeft ? -50 : this.width + 50,
+      y: 150 + Math.random() * (this.height - 250),
+      type: type,
+      direction: fromLeft ? 1 : -1,
+      caught: false
+    })
+    
+    console.log('[鱼] 生成:', type.name)
+  }
+  
+  // 更新鱼的位置
+  updateFishes() {
+    for (let i = this.fishes.length - 1; i >= 0; i--) {
+      const fish = this.fishes[i]
+      
+      if (!fish.caught) {
+        fish.x += fish.type.speed * fish.direction
+      }
+      
+      // 移除超出屏幕的鱼
+      if ((fish.direction === 1 && fish.x > this.width + 100) ||
+          (fish.direction === -1 && fish.x < -100)) {
+        this.fishes.splice(i, 1)
+      }
+    }
+  }
+  
+  // 更新鱼钩
+  updateHook() {
+    // 左右移动
+    if (this.hookDirection === -1) {
+      this.hookX -= this.hookSpeed
+      if (this.hookX < 20) this.hookX = 20
+    } else if (this.hookDirection === 1) {
+      this.hookX += this.hookSpeed
+      if (this.hookX > this.width - 20) this.hookX = this.width - 20
     }
     
-    console.log('[找茬] 生成差异点:', this.differences.length)
+    // 鱼线状态
+    if (this.lineState === 'dropping') {
+      this.lineY += this.lineSpeed
+      if (this.lineY >= this.height - 50) {
+        this.lineState = 'pulling'
+      }
+      this.checkCatch()
+    } else if (this.lineState === 'pulling') {
+      this.lineY -= this.lineSpeed * 1.5
+      if (this.lineY <= this.hookY) {
+        this.lineY = this.hookY
+        this.lineState = 'idle'
+        
+        if (this.caughtFish) {
+          this.score += this.caughtFish.type.score
+          this.caught++
+          console.log('[钓鱼] 得分:', this.caughtFish.type.score, '总分:', this.score)
+          this.caughtFish = null
+        }
+      }
+    }
+  }
+  
+  // 检查是否钓到鱼
+  checkCatch() {
+    for (let i = 0; i < this.fishes.length; i++) {
+      const fish = this.fishes[i]
+      if (fish.caught) continue
+      
+      const dx = Math.abs(fish.x - this.hookX)
+      const dy = Math.abs(fish.y - this.lineY)
+      
+      if (dx < fish.type.size && dy < fish.type.size + 10) {
+        // 钓到了！
+        fish.caught = true
+        this.caughtFish = fish
+        console.log('[钓鱼] 钓到:', fish.type.name)
+        break
+      }
+    }
   }
   
   // 绑定事件
   bindEvents() {
     console.log('[事件] 绑定')
     
+    // 触摸开始
     wx.onTouchStart((res) => {
       const touch = res.touches[0]
-      this.handleTap(touch.clientX, touch.clientY)
+      this.touchStartX = touch.clientX
+      
+      if (this.state === 'menu') {
+        this.startGame()
+        return
+      }
+      
+      if (this.state === 'gameover') {
+        this.startGame()
+        return
+      }
+      
+      if (this.state !== 'playing') return
+      
+      // 放下鱼钩
+      if (this.lineState === 'idle') {
+        this.lineState = 'dropping'
+        console.log('[钓鱼] 放下鱼钩')
+      }
+    })
+    
+    // 触摸移动
+    wx.onTouchMove((res) => {
+      if (this.state !== 'playing') return
+      
+      const touch = res.touches[0]
+      const deltaX = touch.clientX - this.touchStartX
+      
+      if (deltaX > 10) {
+        this.hookDirection = 1
+      } else if (deltaX < -10) {
+        this.hookDirection = -1
+      } else {
+        this.hookDirection = 0
+      }
+    })
+    
+    // 触摸结束
+    wx.onTouchEnd(() => {
+      if (this.state !== 'playing') return
+      this.hookDirection = 0
     })
     
     console.log('[事件] 完成')
   }
   
-  // 处理点击
-  handleTap(x, y) {
-    console.log('[点击]', x, y)
+  // 更新游戏时间
+  updateTime() {
+    const now = Date.now()
+    const delta = (now - this.lastTime) / 1000
     
-    if (this.state === 'menu') {
-      this.startGame()
-      return
-    }
-    
-    if (this.state === 'gameover') {
-      this.level = 1
-      this.startGame()
-      return
-    }
-    
-    if (this.state !== 'playing') return
-    
-    // 计算点击位置（相对于左图）
-    const leftImageX = this.padding
-    const leftImageY = this.padding + 40
-    
-    // 检查是否点击在左图范围内
-    if (x >= leftImageX && x <= leftImageX + this.imageWidth &&
-        y >= leftImageY && y <= leftImageY + this.imageHeight) {
+    if (delta >= 1) {
+      this.time--
+      this.lastTime = now
       
-      const clickX = x - leftImageX
-      const clickY = y - leftImageY
-      
-      console.log('[点击] 图片内:', clickX, clickY)
-      
-      // 检查是否点到差异点
-      this.checkDifference(clickX, clickY)
-    }
-  }
-  
-  // 检查差异
-  checkDifference(x, y) {
-    for (let i = 0; i < this.differences.length; i++) {
-      const diff = this.differences[i]
-      if (diff.found) continue
-      
-      const dx = x - diff.x
-      const dy = y - diff.y
-      const distance = Math.sqrt(dx * dx + dy * dy)
-      
-      console.log('[检查] 差异点:', i, '距离:', distance, '半径:', diff.radius)
-      
-      if (distance <= diff.radius + 10) {
-        // 找到差异！
-        diff.found = true
-        this.foundDiffs.push(i)
-        this.markedDiffs.push({ x, y })
-        
-        console.log('[找茬] 找到差异!', this.foundDiffs.length, '/', this.diffCount)
-        
-        // 播放效果
-        this.showFoundEffect(x, y)
-        
-        // 检查是否全部找到
-        if (this.foundDiffs.length >= this.diffCount) {
-          setTimeout(() => {
-            this.levelComplete()
-          }, 500)
-        }
-        break
+      if (this.time <= 0) {
+        this.state = 'gameover'
+        console.log('[游戏] 结束')
       }
     }
-    
-    this.render()
-  }
-  
-  // 显示找到效果
-  showFoundEffect(x, y) {
-    // 简单实现：在渲染时显示圈圈
-  }
-  
-  // 关卡完成
-  levelComplete() {
-    console.log('[关卡] 完成:', this.level)
-    
-    if (this.level >= this.maxLevel) {
-      // 游戏通关
-      this.state = 'gameover'
-      this.showWin()
-    } else {
-      // 下一关
-      this.level++
-      this.generateDifferences()
-      this.render()
-      
-      // 显示提示
-      this.showLevelUp()
-    }
-  }
-  
-  // 显示通关
-  showWin() {
-    this.render()
-  }
-  
-  // 显示升级
-  showLevelUp() {
-    const ctx = this.ctx
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'
-    ctx.fillRect(0, 0, this.width, this.height)
-    
-    ctx.fillStyle = '#FFD700'
-    ctx.font = 'bold 36px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText('第' + this.level + '关', this.width / 2, this.height / 2)
-    
-    ctx.font = '20px Arial'
-    ctx.fillStyle = '#fff'
-    ctx.fillText('准备...', this.width / 2, this.height / 2 + 50)
-    
-    setTimeout(() => {
-      this.render()
-    }, 1500)
   }
   
   // 开始游戏
@@ -213,9 +224,35 @@ export default class Game {
   startGame() {
     console.log('[游戏] 开始')
     this.state = 'playing'
-    this.level = 1
-    this.generateDifferences()
-    this.render()
+    this.time = 60
+    this.score = 0
+    this.caught = 0
+    this.fishes = []
+    this.caughtFish = null
+    this.lineY = this.hookY
+    this.lineState = 'idle'
+    this.hookX = this.width / 2
+    this.lastTime = Date.now()
+    this.lastSpawn = Date.now()
+  }
+  
+  // 游戏循环
+  gameLoop() {
+    if (this.state === 'playing') {
+      this.updateTime()
+      this.updateHook()
+      this.updateFishes()
+      
+      // 生成鱼
+      const now = Date.now()
+      if (now - this.lastSpawn > this.spawnInterval) {
+        this.spawnFish()
+        this.lastSpawn = now
+      }
+      
+      this.render()
+      requestAnimationFrame(() => this.gameLoop())
+    }
   }
   
   // 渲染
@@ -223,7 +260,7 @@ export default class Game {
     if (!this.ctx) return
     
     // 清空
-    this.ctx.fillStyle = '#1a1a2e'
+    this.ctx.fillStyle = '#87CEEB'
     this.ctx.fillRect(0, 0, this.width, this.height)
     
     if (this.state === 'menu') {
@@ -231,7 +268,7 @@ export default class Game {
     } else if (this.state === 'playing') {
       this.renderGame()
     } else if (this.state === 'gameover') {
-      this.renderWin()
+      this.renderGameOver()
     }
   }
   
@@ -240,208 +277,154 @@ export default class Game {
     const ctx = this.ctx
     
     // 标题
-    ctx.fillStyle = '#FFD700'
-    ctx.font = 'bold 42px Arial'
+    ctx.fillStyle = '#FF6B6B'
+    ctx.font = 'bold 48px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('大家来找茬', this.width / 2, this.height / 4)
+    ctx.fillText('欢乐钓鱼', this.width / 2, this.height / 4)
     
     // 说明
     ctx.fillStyle = '#fff'
-    ctx.font = '18px Arial'
-    ctx.fillText('找出两张图片的差异', this.width / 2, this.height / 3)
-    ctx.fillText('共 ' + this.maxLevel + ' 关', this.width / 2, this.height / 3 + 30)
+    ctx.font = '20px Arial'
+    ctx.fillText('滑动左右移动鱼钩', this.width / 2, this.height / 3)
+    ctx.fillText('点击放下鱼钩钓鱼', this.width / 2, this.height / 3 + 40)
     
-    // 示例图
-    const demoSize = 100
-    const demoX = (this.width - demoSize * 2 - 10) / 2
-    const demoY = this.height / 2
-    
-    // 左图
-    ctx.fillStyle = '#4ECDC4'
-    ctx.fillRect(demoX, demoY, demoSize, demoSize)
-    ctx.fillStyle = '#FF6B6B'
-    ctx.beginPath()
-    ctx.arc(demoX + 30, demoY + 30, 15, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 右图（有差异）
-    ctx.fillStyle = '#4ECDC4'
-    ctx.fillRect(demoX + demoSize + 10, demoY, demoSize, demoSize)
-    ctx.fillStyle = '#45B7D1' // 颜色不同
-    ctx.beginPath()
-    ctx.arc(demoX + demoSize + 10 + 30, demoY + 30, 15, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 差异标记
-    ctx.strokeStyle = '#FFD700'
-    ctx.lineWidth = 3
-    ctx.beginPath()
-    ctx.arc(demoX + demoSize + 10 + 30, demoY + 30, 20, 0, Math.PI * 2)
-    ctx.stroke()
+    // 鱼的图例
+    const startY = this.height / 2
+    this.fishTypes.forEach((type, i) => {
+      const y = startY + i * 50
+      
+      // 鱼
+      ctx.fillStyle = type.color
+      ctx.beginPath()
+      ctx.ellipse(this.width / 2, y, type.size, type.size / 2, 0, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // 分数
+      ctx.fillStyle = '#333'
+      ctx.font = '16px Arial'
+      ctx.fillText(type.name + ' +' + type.score + '分', this.width / 2 + 50, y + 6)
+    })
     
     // 开始按钮
     ctx.fillStyle = '#4ECDC4'
-    ctx.fillRect(this.width / 2 - 80, this.height * 0.75, 160, 55)
+    ctx.fillRect(this.width / 2 - 80, this.height * 0.8, 160, 55)
     ctx.fillStyle = '#fff'
     ctx.font = 'bold 24px Arial'
-    ctx.fillText('开始游戏', this.width / 2, this.height * 0.75 + 35)
+    ctx.fillText('开始钓鱼', this.width / 2, this.height * 0.8 + 35)
   }
   
   // 渲染游戏
   renderGame() {
     const ctx = this.ctx
     
-    // 顶部信息
+    // 天空
+    const gradient = ctx.createLinearGradient(0, 0, 0, this.height)
+    gradient.addColorStop(0, '#87CEEB')
+    gradient.addColorStop(0.3, '#E0F6FF')
+    gradient.addColorStop(1, '#1E90FF')
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, this.width, this.height)
+    
+    // 顶部信息栏
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'
+    ctx.fillRect(0, 0, this.width, 50)
+    
     ctx.fillStyle = '#fff'
     ctx.font = '18px Arial'
     ctx.textAlign = 'left'
-    ctx.fillText('关卡：' + this.level + '/' + this.maxLevel, 15, 28)
+    ctx.fillText('时间：' + this.time + '秒', 15, 32)
+    ctx.textAlign = 'center'
+    ctx.fillText('分数：' + this.score, this.width / 2, 32)
     ctx.textAlign = 'right'
-    ctx.fillText('找到：' + this.foundDiffs.length + '/' + this.diffCount, this.width - 15, 28)
+    ctx.fillText('钓到：' + this.caught + '条', this.width - 15, 32)
     
-    const imageY = this.padding + 40
+    // 绘制鱼钩支架
+    ctx.fillStyle = '#8B4513'
+    ctx.fillRect(this.hookX - 5, 0, 10, this.hookY)
     
-    // 绘制左图
-    this.drawImage(ctx, this.padding, imageY, false)
+    // 绘制鱼线
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(this.hookX, this.hookY)
+    ctx.lineTo(this.hookX, this.lineY)
+    ctx.stroke()
     
-    // 绘制右图
-    this.drawImage(ctx, this.padding + this.imageWidth + this.gap, imageY, true)
+    // 绘制鱼钩
+    ctx.strokeStyle = '#666'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(this.hookX, this.lineY, 10, 0, Math.PI, false)
+    ctx.stroke()
     
-    // 绘制已标记的差异
-    this.drawMarkedDiffs(ctx, this.padding, imageY)
-    this.drawMarkedDiffs(ctx, this.padding + this.imageWidth + this.gap, imageY)
+    // 绘制钓到的鱼
+    if (this.caughtFish) {
+      this.drawFish(this.caughtFish, this.hookX, this.lineY + 20)
+    }
+    
+    // 绘制鱼
+    this.fishes.forEach(fish => {
+      if (!fish.caught) {
+        this.drawFish(fish, fish.x, fish.y)
+      }
+    })
     
     // 底部提示
-    ctx.fillStyle = 'rgba(255,255,255,0.7)'
-    ctx.font = '14px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText('点击左图找出差异', this.width / 2, imageY + this.imageHeight + 25)
-  }
-  
-  // 绘制图片（用色块模拟）
-  drawImage(ctx, x, y, isRight) {
-    // 背景
-    ctx.fillStyle = '#2d3436'
-    ctx.fillRect(x, y, this.imageWidth, this.imageHeight)
-    
-    // 边框
-    ctx.strokeStyle = '#636e72'
-    ctx.lineWidth = 2
-    ctx.strokeRect(x, y, this.imageWidth, this.imageHeight)
-    
-    // 绘制场景（简化版：用几何图形表示）
-    const centerX = x + this.imageWidth / 2
-    const centerY = y + this.imageHeight / 2
-    
-    // 天空
-    ctx.fillStyle = '#74b9ff'
-    ctx.fillRect(x, y, this.imageWidth, this.imageHeight / 2)
-    
-    // 草地
-    ctx.fillStyle = '#55efc4'
-    ctx.fillRect(x, y + this.imageHeight / 2, this.imageWidth, this.imageHeight / 2)
-    
-    // 太阳
-    ctx.fillStyle = '#ffeaa7'
-    ctx.beginPath()
-    ctx.arc(centerX - 30, y + 40, 25, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 房子
-    ctx.fillStyle = '#fd79a8'
-    ctx.fillRect(centerX - 40, centerY, 80, 60)
-    
-    // 屋顶
-    ctx.fillStyle = '#d63031'
-    ctx.beginPath()
-    ctx.moveTo(centerX - 50, centerY)
-    ctx.lineTo(centerX, centerY - 40)
-    ctx.lineTo(centerX + 50, centerY)
-    ctx.fill()
-    
-    // 门
-    ctx.fillStyle = '#6c5ce7'
-    ctx.fillRect(centerX - 15, centerY + 20, 30, 40)
-    
-    // 窗户
-    ctx.fillStyle = '#fdcb6e'
-    ctx.fillRect(centerX - 35, centerY + 10, 20, 20)
-    ctx.fillRect(centerX + 15, centerY + 10, 20, 20)
-    
-    // 树
-    ctx.fillStyle = '#a29bfe'
-    ctx.fillRect(centerX + 60, centerY + 20, 15, 40)
-    ctx.fillStyle = '#00b894'
-    ctx.beginPath()
-    ctx.arc(centerX + 67, centerY, 30, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 绘制差异（右图时）
-    if (isRight) {
-      this.drawRightDifferences(ctx, x, y)
-    }
-    
-    // 绘制差异标记圈
-    this.drawDifferenceCircles(ctx, x, y)
-  }
-  
-  // 绘制右图差异
-  drawRightDifferences(ctx, x, y) {
-    // 差异 1: 太阳颜色不同
-    if (this.level >= 1) {
-      ctx.fillStyle = '#fab1a0' // 不同的颜色
-      ctx.beginPath()
-      ctx.arc(x + this.imageWidth / 2 - 30 + 67, y + 40, 25, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    
-    // 差异 2: 门颜色不同
-    if (this.level >= 2) {
-      ctx.fillStyle = '#a29bfe'
-      ctx.fillRect(x + this.imageWidth / 2 - 15 + 67, y + this.imageHeight / 2 + 20, 30, 40)
-    }
-    
-    // 差异 3: 树颜色不同
-    if (this.level >= 3) {
-      ctx.fillStyle = '#6c5ce7'
-      ctx.beginPath()
-      ctx.arc(x + this.imageWidth / 2 + 67 + 67, y + this.imageHeight / 2, 30, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  }
-  
-  // 绘制差异标记圈
-  drawDifferenceCircles(ctx, x, y) {
-    for (let i = 0; i < this.differences.length; i++) {
-      const diff = this.differences[i]
-      if (!diff.found) continue
-      
-      const cx = x + diff.x
-      const cy = y + diff.y
-      
-      // 红色圈圈
-      ctx.strokeStyle = '#ff0000'
-      ctx.lineWidth = 3
-      ctx.beginPath()
-      ctx.arc(cx, cy, diff.radius + 5, 0, Math.PI * 2)
-      ctx.stroke()
-      
-      // 对勾
-      ctx.fillStyle = '#00ff00'
-      ctx.font = 'bold 20px Arial'
+    if (this.lineState === 'idle') {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'
+      ctx.font = '14px Arial'
       ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('✓', cx, cy)
+      ctx.fillText('点击屏幕放下鱼钩', this.width / 2, this.height - 20)
     }
   }
   
-  // 绘制已标记的差异
-  drawMarkedDiffs(ctx, offsetX, offsetY) {
-    // 在图片上方显示标记
+  // 绘制鱼
+  drawFish(fish, x, y) {
+    const ctx = this.ctx
+    const type = fish.type
+    const dir = fish.direction
+    
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.scale(dir, 1)
+    
+    // 鱼身
+    ctx.fillStyle = type.color
+    ctx.beginPath()
+    ctx.ellipse(0, 0, type.size, type.size / 2, 0, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // 鱼尾
+    ctx.beginPath()
+    ctx.moveTo(-type.size + 5, 0)
+    ctx.lineTo(-type.size - 10, -type.size / 3)
+    ctx.lineTo(-type.size - 10, type.size / 3)
+    ctx.closePath()
+    ctx.fill()
+    
+    // 鱼鳍
+    ctx.beginPath()
+    ctx.moveTo(0, -type.size / 2)
+    ctx.lineTo(-10, -type.size / 2 - 8)
+    ctx.lineTo(10, -type.size / 2)
+    ctx.closePath()
+    ctx.fill()
+    
+    // 眼睛
+    ctx.fillStyle = '#fff'
+    ctx.beginPath()
+    ctx.arc(type.size / 2, -type.size / 6, type.size / 6, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#000'
+    ctx.beginPath()
+    ctx.arc(type.size / 2 + 2, -type.size / 6, type.size / 10, 0, Math.PI * 2)
+    ctx.fill()
+    
+    ctx.restore()
   }
   
-  // 渲染通关
-  renderWin() {
+  // 渲染游戏结束
+  renderGameOver() {
     const ctx = this.ctx
     
     // 背景
@@ -452,19 +435,33 @@ export default class Game {
     ctx.fillStyle = '#FFD700'
     ctx.font = 'bold 40px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('恭喜通关!', this.width / 2, this.height / 3)
+    ctx.fillText('时间到!', this.width / 2, this.height / 4)
     
     // 分数
     ctx.fillStyle = '#fff'
-    ctx.font = '24px Arial'
-    ctx.fillText('你找出了所有差异!', this.width / 2, this.height / 2)
+    ctx.font = '28px Arial'
+    ctx.fillText('总分：' + this.score, this.width / 2, this.height / 2)
+    
+    ctx.font = '22px Arial'
+    ctx.fillText('钓到：' + this.caught + '条鱼', this.width / 2, this.height / 2 + 50)
+    
+    // 评级
+    let rating = '菜鸟'
+    if (this.score >= 100) rating = '渔夫'
+    if (this.score >= 300) rating = '高手'
+    if (this.score >= 500) rating = '大师'
+    if (this.score >= 800) rating = '传奇'
+    
+    ctx.fillStyle = '#FFD700'
+    ctx.font = 'bold 24px Arial'
+    ctx.fillText('评级：' + rating, this.width / 2, this.height / 2 + 100)
     
     // 重新开始
     ctx.fillStyle = '#4ECDC4'
-    ctx.fillRect(this.width / 2 - 80, this.height * 0.65, 160, 50)
+    ctx.fillRect(this.width / 2 - 80, this.height * 0.7, 160, 50)
     ctx.fillStyle = '#fff'
     ctx.font = '20px Arial'
-    ctx.fillText('再玩一次', this.width / 2, this.height * 0.65 + 30)
+    ctx.fillText('再钓一次', this.width / 2, this.height * 0.7 + 30)
   }
   
   // 暂停
@@ -483,6 +480,8 @@ export default class Game {
   
   // 广告奖励
   useAdReward(type) {
-    console.log('[广告] 奖励:', type)
+    if (type === 'extraTime') {
+      this.time += 30
+    }
   }
 }
