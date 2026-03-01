@@ -1,6 +1,6 @@
 /**
- * 欢乐钓鱼 - 微信小游戏
- * 完整修复版
+ * 欢乐钓鱼 - 参考 wow-fishing 重构版
+ * 微信小游戏原生版本
  */
 
 export default class Game {
@@ -13,36 +13,41 @@ export default class Game {
     this.width = this.systemInfo.windowWidth
     this.height = this.systemInfo.windowHeight
     
-    // 游戏状态
-    this.state = 'menu' // menu, playing, gameover
-    this.time = 180  // 3 分钟
+    // 游戏状态 - 参考原项目的状态机
+    this.state = 'menu' // menu, playing, casting, waiting, biting, reeling, gameover
+    this.time = 180
+    this.lastTime = Date.now()
     this.score = 0
     this.caught = 0
     
-    // 鱼钩 - 固定在顶部中间
+    // 鱼钩 - 固定在顶部
     this.hookX = this.width / 2
     this.hookY = 60
     this.hookTargetX = this.width / 2
-    this.hookSpeed = 8
     
-    // 鱼线
+    // 鱼线 - 参考原项目的钓鱼状态
     this.lineLength = 0
     this.maxLineLength = this.height - 100
-    this.lineSpeed = 5
-    this.lineState = 'idle' // idle, dropping, pulling, caught
+    this.lineSpeed = 6
+    this.lineState = 'idle' // idle, dropping, pulling
     
-    // 鱼
+    // 鱼咬钩计时器
+    this.biteTimer = null
+    this.waitTime = 0
+    
+    // 鱼配置 - 参考原项目
     this.fishTypes = [
-      { name: '小鱼', color: '#4ECDC4', score: 10, speed: 2, size: 25 },
-      { name: '中鱼', color: '#45B7D1', score: 20, speed: 3, size: 35 },
-      { name: '大鱼', color: '#FF6B6B', score: 30, speed: 1.5, size: 45 },
-      { name: '金鱼', color: '#FFD700', score: 50, speed: 4, size: 30 }
+      { name: '小鱼', color: '#4ECDC4', score: 10, speed: 2, size: 25, rarity: 'common' },
+      { name: '中鱼', color: '#45B7D1', score: 20, speed: 3, size: 35, rarity: 'common' },
+      { name: '大鱼', color: '#FF6B6B', score: 30, speed: 1.5, size: 45, rarity: 'uncommon' },
+      { name: '金鱼', color: '#FFD700', score: 50, speed: 4, size: 30, rarity: 'rare' },
+      { name: '鲨鱼', color: '#6c5ce7', score: 100, speed: 2, size: 55, rarity: 'legendary' }
     ]
     
     this.fishes = []
     this.caughtFish = null
     this.spawnTimer = 0
-    this.spawnInterval = 60 // 帧
+    this.spawnInterval = 50
     
     // 触摸
     this.touchX = 0
@@ -55,9 +60,17 @@ export default class Game {
     this.render()
   }
   
-  // 生成鱼
+  // 生成鱼 - 参考原项目逻辑
   spawnFish() {
-    const typeIndex = Math.floor(Math.random() * this.fishTypes.length)
+    // 随机选择鱼的种类（ weighted random）
+    const rand = Math.random()
+    let typeIndex
+    if (rand < 0.4) typeIndex = 0  // 小鱼 40%
+    else if (rand < 0.7) typeIndex = 1  // 中鱼 30%
+    else if (rand < 0.85) typeIndex = 2  // 大鱼 15%
+    else if (rand < 0.95) typeIndex = 3  // 金鱼 10%
+    else typeIndex = 4  // 鲨鱼 5%
+    
     const type = this.fishTypes[typeIndex]
     const fromLeft = Math.random() > 0.5
     
@@ -71,27 +84,31 @@ export default class Game {
     }
     
     this.fishes.push(fish)
-    console.log('[鱼] 生成:', type.name)
+    console.log('[鱼] 生成:', type.name, type.rarity)
   }
   
-  // 更新
+  // 更新 - 参考原项目的状态更新
   update() {
     if (this.state !== 'playing') return
     
     // 时间
-    this.time--
-    if (this.time <= 0) {
-      this.state = 'gameover'
-      console.log('[游戏] 结束! 分数:', this.score)
-      return
+    const now = Date.now()
+    if (now - this.lastTime >= 1000) {
+      this.time--
+      this.lastTime = now
+      if (this.time <= 0) {
+        this.state = 'gameover'
+        console.log('[游戏] 结束! 分数:', this.score)
+        return
+      }
     }
     
     // 鱼钩左右移动
     if (Math.abs(this.hookX - this.hookTargetX) > 1) {
-      this.hookX += (this.hookTargetX > this.hookX) ? this.hookSpeed : -this.hookSpeed
+      this.hookX += (this.hookTargetX > this.hookX) ? 8 : -8
     }
     
-    // 鱼线状态
+    // 鱼线状态更新
     if (this.lineState === 'dropping') {
       this.lineLength += this.lineSpeed
       if (this.lineLength >= this.maxLineLength) {
@@ -107,7 +124,7 @@ export default class Game {
         if (this.caughtFish) {
           this.score += this.caughtFish.type.score
           this.caught++
-          console.log('[得分] +', this.caughtFish.type.score, '总分:', this.score)
+          console.log('[得分] +', this.caughtFish.type.score, '总分:', this.score, '钓到:', this.caught)
           this.caughtFish = null
         }
       }
@@ -147,7 +164,7 @@ export default class Game {
     }
   }
   
-  // 检查碰撞
+  // 检查碰撞 - 参考原项目
   checkCollision() {
     const hookY = this.hookY + this.lineLength
     
@@ -164,7 +181,7 @@ export default class Game {
         fish.caught = true
         this.caughtFish = fish
         this.lineState = 'pulling'
-        console.log('[钓鱼] 钓到:', fish.type.name)
+        console.log('[钓鱼] 钓到:', fish.type.name, fish.type.rarity)
         break
       }
     }
@@ -179,20 +196,20 @@ export default class Game {
       console.log('[TouchStart]')
       
       if (this.state === 'menu') {
-        console.log('[菜单] 开始游戏')
+        console.log('[菜单] -> 开始游戏')
         this.startGame()
         return
       }
       
       if (this.state === 'gameover') {
-        console.log('[结束] 重新开始')
+        console.log('[结束] -> 重新开始')
         this.startGame()
         return
       }
       
       // 放下鱼钩
       if (this.lineState === 'idle') {
-        console.log('[钓鱼] 放下鱼钩')
+        console.log('[钓鱼] -> 放下鱼钩')
         this.lineState = 'dropping'
       }
     })
@@ -201,7 +218,6 @@ export default class Game {
     wx.onTouchMove((res) => {
       const touch = res.touches[0]
       this.hookTargetX = touch.clientX
-      console.log('[TouchMove] 目标:', this.hookTargetX)
     })
     
     // 触摸结束
@@ -212,7 +228,7 @@ export default class Game {
     console.log('[事件] 完成')
   }
   
-  // 开始游戏
+  // 开始
   start() {
     console.log('[游戏] 启动')
     this.state = 'menu'
@@ -223,7 +239,7 @@ export default class Game {
   startGame() {
     console.log('[游戏] === 新游戏 ===')
     this.state = 'playing'
-    this.time = 60
+    this.time = 180
     this.score = 0
     this.caught = 0
     this.fishes = []
@@ -233,6 +249,7 @@ export default class Game {
     this.hookX = this.width / 2
     this.hookTargetX = this.width / 2
     this.spawnTimer = 0
+    this.lastTime = Date.now()
   }
   
   // 游戏循环
@@ -249,8 +266,6 @@ export default class Game {
     if (!this.ctx) return
     
     const ctx = this.ctx
-    
-    // 清空
     ctx.fillStyle = '#87CEEB'
     ctx.fillRect(0, 0, this.width, this.height)
     
@@ -288,7 +303,7 @@ export default class Game {
   renderGame() {
     const ctx = this.ctx
     
-    // 背景
+    // 背景渐变
     const gradient = ctx.createLinearGradient(0, 0, 0, this.height)
     gradient.addColorStop(0, '#87CEEB')
     gradient.addColorStop(1, '#1E90FF')
@@ -297,16 +312,16 @@ export default class Game {
     
     // 顶部信息栏
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
-    ctx.fillRect(0, 0, this.width, 45)
+    ctx.fillRect(0, 0, this.width, 50)
     
     ctx.fillStyle = '#fff'
     ctx.font = '16px Arial'
     ctx.textAlign = 'left'
-    ctx.fillText('时间:' + this.time + 's', 12, 28)
+    ctx.fillText('时间:' + this.time + 's', 12, 32)
     ctx.textAlign = 'center'
-    ctx.fillText('分数:' + this.score, this.width / 2, 28)
+    ctx.fillText('分数:' + this.score, this.width / 2, 32)
     ctx.textAlign = 'right'
-    ctx.fillText('钓到:' + this.caught, this.width - 12, 28)
+    ctx.fillText('钓到:' + this.caught, this.width - 12, 32)
     
     // 鱼钩支架
     ctx.fillStyle = '#8B4513'
@@ -394,6 +409,17 @@ export default class Game {
     ctx.fillText('总分:' + this.score, this.width / 2, this.height / 2)
     ctx.fillText('钓到:' + this.caught + '条', this.width / 2, this.height / 2 + 40)
     
+    // 评级
+    let rating = '菜鸟'
+    if (this.score >= 100) rating = '渔夫'
+    if (this.score >= 300) rating = '高手'
+    if (this.score >= 500) rating = '大师'
+    if (this.score >= 800) rating = '传奇'
+    
+    ctx.fillStyle = '#FFD700'
+    ctx.font = '20px Arial'
+    ctx.fillText('评级:' + rating, this.width / 2, this.height / 2 + 90)
+    
     ctx.fillStyle = '#4ECDC4'
     ctx.fillRect(this.width / 2 - 70, this.height * 0.65, 140, 45)
     ctx.fillStyle = '#fff'
@@ -401,18 +427,15 @@ export default class Game {
     ctx.fillText('再玩一次', this.width / 2, this.height * 0.65 + 28)
   }
   
-  // 暂停
   pause() {
     if (this.state === 'playing') this.state = 'paused'
   }
   
-  // 恢复
   resume() {
     if (this.state === 'paused') this.state = 'playing'
   }
   
-  // 广告
   useAdReward(type) {
-    if (type === 'extraTime') this.time += 30
+    if (type === 'extraTime') this.time += 60
   }
 }
