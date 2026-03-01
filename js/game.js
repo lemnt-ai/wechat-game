@@ -43,6 +43,9 @@ export default class Game {
     this.catFrame = 0
     this.rodAngle = 0 // 鱼竿角度
     
+    // 蓄力定时器
+    this.castTimer = null
+    
     // 鱼配置
     this.fishTypes = [
       { name: '小鱼', color: '#4ECDC4', score: 10, speed: 2, size: 25, rarity: 'common' },
@@ -243,6 +246,13 @@ export default class Game {
         this.isCasting = true
         this.castPower = 0
         this.castStartTime = Date.now()
+        
+        // 启动蓄力定时器（不需要移动手指）
+        if (this.castTimer) clearInterval(this.castTimer)
+        this.castTimer = setInterval(() => {
+          this.castPower = Math.min(this.castPower + 2, 100) // 每帧 +2%，50 帧满力
+          console.log('[蓄力] 力度:', this.castPower, '%')
+        }, 50)
       } else if (this.lineState === 'casting') {
         // 再次点击：收竿
         console.log('[钓鱼] 手动收竿')
@@ -254,21 +264,20 @@ export default class Game {
     wx.onTouchMove((res) => {
       const touch = res.touches[0]
       this.hookTargetX = touch.clientX
-      
-      // 蓄力中：显示力度条
-      if (this.isCasting && this.lineState === 'idle') {
-        const elapsed = Date.now() - this.castStartTime
-        this.castPower = Math.min(elapsed / 30, 100) // 3 秒满力
-        console.log('[蓄力] 力度:', this.castPower.toFixed(1), '%')
-      }
     })
     
     wx.onTouchEnd(() => {
-      console.log('[TouchEnd] 蓄力:', this.isCasting, '状态:', this.lineState)
+      console.log('[TouchEnd] 蓄力:', this.isCasting, '状态:', this.lineState, '力度:', this.castPower)
+      
+      // 停止蓄力定时器
+      if (this.castTimer) {
+        clearInterval(this.castTimer)
+        this.castTimer = null
+      }
       
       // 松开手指：抛竿
       if (this.isCasting && this.lineState === 'idle') {
-        console.log('[钓鱼] 抛竿！力度:', this.castPower.toFixed(1))
+        console.log('[钓鱼] 抛竿！力度:', this.castPower)
         this.lineState = 'casting'
         this.isCasting = false
         
@@ -369,6 +378,14 @@ export default class Game {
     this.lastTime = Date.now()
     this.canShowAd = true
     this.adCooldown = 0
+    this.isCasting = false
+    this.castPower = 0
+    
+    // 清除蓄力定时器
+    if (this.castTimer) {
+      clearInterval(this.castTimer)
+      this.castTimer = null
+    }
   }
   
   // 游戏循环
