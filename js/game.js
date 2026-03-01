@@ -1,6 +1,6 @@
 /**
  * 欢乐钓鱼 - 微信小游戏
- * 修复触摸问题版本
+ * 触摸修复版
  */
 
 export default class Game {
@@ -30,7 +30,7 @@ export default class Game {
     // 鱼线
     this.lineY = 80
     this.lineSpeed = 6
-    this.lineState = 'idle' // idle, dropping, pulling
+    this.lineState = 'idle'
     
     // 鱼
     this.fishTypes = [
@@ -47,7 +47,6 @@ export default class Game {
     
     // 触摸
     this.isTouching = false
-    this.touchStartTime = 0
   }
   
   // 生成鱼
@@ -62,6 +61,8 @@ export default class Game {
       direction: fromLeft ? 1 : -1,
       caught: false
     })
+    
+    console.log('[鱼] 生成:', type.name, '位置:', this.fishes[this.fishes.length-1].x, this.fishes[this.fishes.length-1].y)
   }
   
   // 更新鱼
@@ -84,6 +85,7 @@ export default class Game {
       this.lineY += this.lineSpeed
       if (this.lineY >= this.height - 50) {
         this.lineState = 'pulling'
+        console.log('[鱼钩] 到达底部，开始收回')
       }
       this.checkCatch()
     } else if (this.lineState === 'pulling') {
@@ -91,10 +93,11 @@ export default class Game {
       if (this.lineY <= this.hookY) {
         this.lineY = this.hookY
         this.lineState = 'idle'
+        console.log('[鱼钩] 收回完成')
         if (this.caughtFish) {
           this.score += this.caughtFish.type.score
           this.caught++
-          console.log('[得分]', this.caughtFish.type.score, '总分:', this.score)
+          console.log('[得分]', this.caughtFish.type.score, '总分:', this.score, '钓到:', this.caught)
           this.caughtFish = null
         }
       }
@@ -110,7 +113,7 @@ export default class Game {
       const dx = Math.abs(fish.x - this.hookX)
       const dy = Math.abs(fish.y - this.lineY)
       
-      if (dx < fish.type.size + 10 && dy < fish.type.size + 10) {
+      if (dx < fish.type.size + 15 && dy < fish.type.size + 15) {
         fish.caught = true
         this.caughtFish = fish
         console.log('[钓鱼] 钓到:', fish.type.name)
@@ -119,35 +122,39 @@ export default class Game {
     }
   }
   
-  // 绑定事件 - 简化版
+  // 绑定事件
   bindEvents() {
     console.log('[事件] 开始绑定')
     
     // 触摸开始
     wx.onTouchStart((res) => {
-      console.log('[TouchStart]', res.touches.length, 'touches')
+      console.log('[TouchStart] touches:', res.touches.length)
       
       if (this.state === 'menu') {
-        console.log('[菜单] 开始游戏')
+        console.log('[菜单] -> 开始游戏')
         this.startGame()
         return
       }
       
       if (this.state === 'gameover') {
-        console.log('[结束] 重新开始')
+        console.log('[结束] -> 重新开始')
         this.startGame()
         return
       }
       
-      if (this.state !== 'playing') return
+      if (this.state !== 'playing') {
+        console.log('[状态] 不是 playing:', this.state)
+        return
+      }
       
       this.isTouching = true
-      this.touchStartTime = Date.now()
       
-      // 放下鱼钩
+      // 鱼钩空闲时才能放下
       if (this.lineState === 'idle') {
-        console.log('[钓鱼] 放下鱼钩')
+        console.log('[钓鱼] -> 放下鱼钩! 位置:', this.hookX)
         this.lineState = 'dropping'
+      } else {
+        console.log('[钓鱼] 鱼钩正在:', this.lineState)
       }
     })
     
@@ -181,8 +188,10 @@ export default class Game {
     if (now - this.lastTime >= 1000) {
       this.time--
       this.lastTime = now
+      console.log('[时间] 剩余:', this.time)
       if (this.time <= 0) {
         this.state = 'gameover'
+        console.log('[游戏] 结束!')
       }
     }
   }
@@ -197,7 +206,7 @@ export default class Game {
   
   // 开始新游戏
   startGame() {
-    console.log('[游戏] 新游戏')
+    console.log('[游戏] === 新游戏开始 ===')
     this.state = 'playing'
     this.time = 60
     this.score = 0
@@ -209,6 +218,7 @@ export default class Game {
     this.hookX = this.width / 2
     this.lastTime = Date.now()
     this.lastSpawn = Date.now()
+    console.log('[游戏] 状态:', this.state, '时间:', this.time)
   }
   
   // 游戏循环
@@ -320,6 +330,14 @@ export default class Game {
         this.drawFish(fish, fish.x, fish.y)
       }
     })
+    
+    // 状态提示
+    if (this.lineState === 'idle') {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'
+      ctx.font = '14px Arial'
+      ctx.textAlign = 'center'
+      ctx.fillText('点击放下鱼钩', this.width / 2, this.height - 20)
+    }
   }
   
   // 绘制鱼
