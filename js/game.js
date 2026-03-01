@@ -20,9 +20,9 @@ export default class Game {
     this.score = 0
     this.caught = 0
     
-    // 船和渔夫在顶部
+    // 船和渔夫在水面
     this.boatX = this.width / 2
-    this.boatY = 150  // 船在水面位置
+    this.boatY = 175  // 船在水面位置 (150-200px 之间)
     this.hookX = this.width / 2
     this.hookY = this.boatY
     this.hookTargetX = this.width / 2
@@ -90,7 +90,7 @@ export default class Game {
     
     const fish = {
       x: fromLeft ? -50 : this.width + 50,
-      y: 250 + Math.random() * (this.height - 350),
+      y: 250 + Math.random() * (this.height - 400),  // 鱼在 250px 到海底之间
       type: type,
       direction: fromLeft ? 1 : -1,
       caught: false,
@@ -183,7 +183,7 @@ export default class Game {
       const fish = this.fishes[i]
       
       if (fish.caught) {
-        const lineStartY = this.boatY - 60
+        const lineStartY = this.boatY + 10
         fish.x = this.hookX
         fish.y = lineStartY + this.lineLength + 30
         continue
@@ -211,7 +211,7 @@ export default class Game {
   
   // 检查碰撞
   checkCollision() {
-    const lineStartY = this.boatY - 60
+    const lineStartY = this.boatY + 10
     const hookY = lineStartY + this.lineLength
     
     for (let i = 0; i < this.fishes.length; i++) {
@@ -363,63 +363,75 @@ export default class Game {
   // 渲染背景（海底世界）
   renderBackground() {
     const ctx = this.ctx
+    const waterSurfaceY = 200  // 水面位置
+    const seaBottomY = this.height - 100  // 海底位置
     
-    // 天空渐变
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, 100)
+    // 1. 天空区域 (0 - 150px)
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, 150)
     skyGradient.addColorStop(0, '#87CEEB')
     skyGradient.addColorStop(1, '#E0F6FF')
     ctx.fillStyle = skyGradient
-    ctx.fillRect(0, 0, this.width, 100)
+    ctx.fillRect(0, 0, this.width, 150)
     
     // 云朵
-    ctx.fillStyle = 'rgba(255,255,255,0.8)'
-    ctx.beginPath()
-    ctx.arc(100, 50, 30, 0, Math.PI * 2)
-    ctx.arc(140, 50, 40, 0, Math.PI * 2)
-    ctx.arc(180, 50, 30, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    this.renderCloud(ctx, 80, 40, 35)
+    this.renderCloud(ctx, 130, 50, 40)
+    this.renderCloud(ctx, this.width - 150, 60, 45)
+    this.renderCloud(ctx, this.width - 80, 50, 35)
     
-    ctx.beginPath()
-    ctx.arc(this.width - 150, 60, 35, 0, Math.PI * 2)
-    ctx.arc(this.width - 100, 60, 45, 0, Math.PI * 2)
-    ctx.arc(this.width - 50, 60, 30, 0, Math.PI * 2)
-    ctx.fill()
+    // 2. 水面区域 (150 - 200px)
+    const surfaceGradient = ctx.createLinearGradient(0, 150, 0, 200)
+    surfaceGradient.addColorStop(0, '#00BFFF')
+    surfaceGradient.addColorStop(1, '#1E90FF')
+    ctx.fillStyle = surfaceGradient
+    ctx.fillRect(0, 150, this.width, 50)
     
-    // 水面
-    const waterGradient = ctx.createLinearGradient(0, 100, 0, this.height)
-    waterGradient.addColorStop(0, '#00BFFF')
-    waterGradient.addColorStop(0.3, '#1E90FF')
-    waterGradient.addColorStop(1, '#00008B')
+    // 水波纹
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'
+    ctx.lineWidth = 2
+    for (let i = 0; i < 10; i++) {
+      const x = i * 80
+      ctx.beginPath()
+      ctx.moveTo(x, 175)
+      ctx.quadraticCurveTo(x + 20, 170, x + 40, 175)
+      ctx.stroke()
+    }
+    
+    // 3. 水下区域 (200px - 海底)
+    const waterGradient = ctx.createLinearGradient(0, 200, 0, seaBottomY)
+    waterGradient.addColorStop(0, '#1E90FF')
+    waterGradient.addColorStop(0.5, '#006994')
+    waterGradient.addColorStop(1, '#003366')
     ctx.fillStyle = waterGradient
-    ctx.fillRect(0, 100, this.width, this.height - 100)
+    ctx.fillRect(0, 200, this.width, seaBottomY - 200)
     
     // 光线效果
     ctx.save()
-    ctx.globalAlpha = 0.1
+    ctx.globalAlpha = 0.15
     ctx.fillStyle = '#fff'
-    for (let i = 0; i < 5; i++) {
-      const x = 100 + i * 150
+    for (let i = 0; i < 6; i++) {
+      const x = 100 + i * 130
       ctx.beginPath()
-      ctx.moveTo(x, 100)
-      ctx.lineTo(x - 50, this.height)
-      ctx.lineTo(x + 50, this.height)
+      ctx.moveTo(x - 30, 200)
+      ctx.lineTo(x - 60, seaBottomY)
+      ctx.lineTo(x + 30, seaBottomY)
+      ctx.lineTo(x + 10, 200)
       ctx.closePath()
       ctx.fill()
     }
     ctx.restore()
     
-    // 海底沙子
-    const sandGradient = ctx.createLinearGradient(0, this.height - 80, 0, this.height)
+    // 4. 海底沙子 (seaBottomY - height)
+    const sandGradient = ctx.createLinearGradient(0, seaBottomY, 0, this.height)
     sandGradient.addColorStop(0, '#F4D03F')
-    sandGradient.addColorStop(1, '#D4AC0D')
+    sandGradient.addColorStop(0.5, '#D4AC0D')
+    sandGradient.addColorStop(1, '#9A7D0A')
     ctx.fillStyle = sandGradient
-    ctx.fillRect(0, this.height - 80, this.width, 80)
+    ctx.fillRect(0, seaBottomY, this.width, 100)
     
-    // 海草
-    this.renderSeaweed(ctx, 50, this.height - 80, 60)
-    this.renderSeaweed(ctx, 100, this.height - 80, 80)
-    this.renderSeaweed(ctx, this.width - 100, this.height - 80, 70)
-    this.renderSeaweed(ctx, this.width - 50, this.height - 80, 90)
+    // 海底装饰
+    this.renderSeaDecorations(ctx, seaBottomY)
     
     // 气泡
     ctx.fillStyle = 'rgba(255,255,255,0.3)'
@@ -428,6 +440,76 @@ export default class Game {
       ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2)
       ctx.fill()
     })
+  }
+  
+  // 渲染云朵
+  renderCloud(ctx, x, y, size) {
+    ctx.beginPath()
+    ctx.arc(x, y, size, 0, Math.PI * 2)
+    ctx.arc(x + size * 0.8, y - 5, size * 0.9, 0, Math.PI * 2)
+    ctx.arc(x + size * 1.5, y, size * 0.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  
+  // 渲染海底装饰
+  renderSeaDecorations(ctx, seaBottomY) {
+    // 海草
+    this.renderSeaweed(ctx, 60, seaBottomY, 70)
+    this.renderSeaweed(ctx, 120, seaBottomY, 90)
+    this.renderSeaweed(ctx, 180, seaBottomY, 60)
+    this.renderSeaweed(ctx, this.width - 150, seaBottomY, 80)
+    this.renderSeaweed(ctx, this.width - 90, seaBottomY, 70)
+    this.renderSeaweed(ctx, this.width - 40, seaBottomY, 90)
+    
+    // 海星
+    this.renderStarfish(ctx, 200, seaBottomY + 30, '#FF6B6B')
+    this.renderStarfish(ctx, this.width - 200, seaBottomY + 50, '#FFD700')
+    
+    // 贝壳
+    this.renderShell(ctx, 300, seaBottomY + 40, '#FFB6C1')
+    this.renderShell(ctx, this.width - 300, seaBottomY + 20, '#DDA0DD')
+  }
+  
+  // 渲染海草
+  renderSeaweed(ctx, x, y, height) {
+    const sway = Math.sin(Date.now() / 500 + x) * 10
+    ctx.fillStyle = '#228B22'
+    ctx.beginPath()
+    ctx.moveTo(x - 8, y)
+    ctx.quadraticCurveTo(x + sway, y - height / 2, x - 4, y - height)
+    ctx.quadraticCurveTo(x + 4, y - height / 2, x + 8, y)
+    ctx.closePath()
+    ctx.fill()
+  }
+  
+  // 渲染海星
+  renderStarfish(ctx, x, y, color) {
+    ctx.fillStyle = color
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(Math.PI / 5)
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath()
+      ctx.moveTo(0, 0)
+      ctx.lineTo(10, -5)
+      ctx.lineTo(15, 0)
+      ctx.lineTo(10, 5)
+      ctx.closePath()
+      ctx.fill()
+      ctx.rotate(Math.PI * 2 / 5)
+    }
+    ctx.restore()
+  }
+  
+  // 渲染贝壳
+  renderShell(ctx, x, y, color) {
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.ellipse(x, y, 15, 10, 0, Math.PI, 0)
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 1
+    ctx.stroke()
   }
   
   // 渲染海草
@@ -558,8 +640,8 @@ export default class Game {
   // 渲染鱼线
   renderFishingLine() {
     const ctx = this.ctx
-    const lineStartX = this.boatX + 40
-    const lineStartY = this.boatY - 60
+    const lineStartX = this.boatX + 30
+    const lineStartY = this.boatY + 10  // 从船边伸出
     
     ctx.strokeStyle = '#fff'
     ctx.lineWidth = 1.5
