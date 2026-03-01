@@ -107,121 +107,132 @@ export default class Game {
   bindEvents() {
     console.log('绑定事件...')
     
-    // 使用 wx.onTouchStart
-    wx.onTouchStart((res) => {
+    // 处理点击/触摸
+    const handleInput = (x, y) => {
+      console.log('=== 输入事件 ===')
+      console.log('点击坐标:', x, y)
+      console.log('游戏区域:', this.offsetX, this.offsetY, this.cellSize)
+      
       if (this.state !== 'playing') {
-        // 菜单状态下点击开始游戏
+        console.log('当前状态:', this.state)
         if (this.state === 'menu') {
+          console.log('开始游戏!')
           this.startGame()
         } else if (this.state === 'gameover') {
-          // 游戏结束状态下看广告复活
           this.adManager.showRewardedAd()
         }
         return
       }
       
-      const touch = res.touches[0]
-      const x = touch.clientX
-      const y = touch.clientY
-      
-      this.touchStartPos = { x, y }
-      
       const col = Math.floor((x - this.offsetX) / this.cellSize)
       const row = Math.floor((y - this.offsetY) / this.cellSize)
       
-      console.log('触摸位置:', row, col, '网格:', this.gridSize)
+      console.log('计算网格位置:', row, col)
+      console.log('当前选中:', this.selectedCell)
       
       if (row >= 0 && row < this.gridSize && col >= 0 && col < this.gridSize) {
+        console.log('有效网格位置')
         if (this.selectedCell) {
-          // 尝试交换
+          console.log('尝试交换:', this.selectedCell, '->', { row, col })
           this.trySwap(this.selectedCell, { row, col })
           this.selectedCell = null
         } else {
+          console.log('选中:', { row, col })
           this.selectedCell = { row, col }
         }
         this.render()
+      } else {
+        console.log('无效位置，清空选中')
+        this.selectedCell = null
+        this.render()
       }
+    }
+    
+    // 触摸事件
+    wx.onTouchStart((res) => {
+      const touch = res.touches[0]
+      handleInput(touch.clientX, touch.clientY)
     })
     
-    // 使用 wx.onTouchEnd
-    wx.onTouchEnd((res) => {
-      if (!this.touchStartPos) return
-      
-      const touch = res.changedTouches[0]
-      const x = touch.clientX
-      const y = touch.clientY
-      
-      const startCol = Math.floor((this.touchStartPos.x - this.offsetX) / this.cellSize)
-      const startRow = Math.floor((this.touchStartPos.y - this.offsetY) / this.cellSize)
-      const endCol = Math.floor((x - this.offsetX) / this.cellSize)
-      const endRow = Math.floor((y - this.offsetY) / this.cellSize)
-      
-      // 滑动检测
-      if (startRow >= 0 && startRow < this.gridSize && startCol >= 0 && startCol < this.gridSize) {
-        const dr = Math.abs(endRow - startRow)
-        const dc = Math.abs(endCol - startCol)
-        
-        if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
-          this.trySwap({ row: startRow, col: startCol }, { row: endRow, col: endCol })
-        }
-      }
-      
-      this.touchStartPos = null
-      this.selectedCell = null
-      this.render()
-    })
+    // 鼠标事件（开发者工具支持）
+    if (this.canvas && typeof this.canvas.addEventListener === 'function') {
+      this.canvas.addEventListener('mousedown', (e) => {
+        console.log('鼠标点击事件')
+        handleInput(e.clientX, e.clientY)
+      })
+    }
     
     console.log('事件绑定完成')
   }
   
   // 尝试交换
   trySwap(cell1, cell2) {
+    console.log('=== 尝试交换 ===')
     const dr = Math.abs(cell1.row - cell2.row)
     const dc = Math.abs(cell1.col - cell2.col)
+    
+    console.log('距离:', dr, dc)
     
     // 必须相邻
     if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
       // 交换
-      const temp = this.grid[cell1.row][cell1.col]
-      this.grid[cell1.row][cell1.col] = this.grid[cell2.row][cell2.col]
-      this.grid[cell2.row][cell2.col] = temp
+      const val1 = this.grid[cell1.row][cell1.col]
+      const val2 = this.grid[cell2.row][cell2.col]
+      console.log('交换前:', val1, '<->', val2)
+      
+      this.grid[cell1.row][cell1.col] = val2
+      this.grid[cell2.row][cell2.col] = val1
       
       // 检查是否有匹配
-      const hasMatch = this.checkMatch(cell1.row, cell1.col) || 
-                       this.checkMatch(cell2.row, cell2.col)
+      const match1 = this.checkMatch(cell1.row, cell1.col)
+      const match2 = this.checkMatch(cell2.row, cell2.col)
+      const hasMatch = match1 || match2
+      
+      console.log('匹配检查:', match1, match2, '结果:', hasMatch)
       
       if (hasMatch) {
+        console.log('消除！步数:', this.moves)
         this.moves--
         this.processMatches()
         this.checkGameState()
       } else {
+        console.log('无匹配，换回来')
         // 换回来
-        const temp = this.grid[cell1.row][cell1.col]
-        this.grid[cell1.row][cell1.col] = this.grid[cell2.row][cell2.col]
-        this.grid[cell2.row][cell2.col] = temp
+        this.grid[cell1.row][cell1.col] = val1
+        this.grid[cell2.row][cell2.col] = val2
       }
+      this.render()
+    } else {
+      console.log('不相邻，取消选中')
+      this.selectedCell = null
+      this.render()
     }
   }
   
   // 处理匹配
   processMatches() {
+    console.log('=== 处理匹配 ===')
     let matched = []
     
     // 查找所有匹配
     for (let i = 0; i < this.gridSize; i++) {
       for (let j = 0; j < this.gridSize; j++) {
         if (this.checkMatch(i, j)) {
+          console.log('找到匹配:', i, j, '颜色:', this.grid[i][j])
           matched.push({ row: i, col: j })
         }
       }
     }
     
+    console.log('匹配数量:', matched.length)
+    
     if (matched.length > 0) {
       // 计分
       this.score += matched.length * 10
       if (matched.length > 3) {
-        this.score += (matched.length - 3) * 20 // 连击奖励
+        this.score += (matched.length - 3) * 20
       }
+      console.log('当前分数:', this.score)
       
       // 消除并下落
       this.clearAndDrop(matched)
