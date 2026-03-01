@@ -550,27 +550,15 @@ export default class Game {
     ctx.fillText(Math.round(this.castPower) + '%', this.width / 2, barY + 35)
   }
   
-  // 渲染猫咪和鱼竿
+  // 渲染猫咪和炮台
   renderCatAndRod(ctx) {
     const catX = this.hookX
     const catY = this.hookY
     
-    // 更新猫咪动画状态
-    if (this.lineState === 'casting') {
-      this.catAnimation = 'casting'
-      this.rodAngle = -0.5 // 甩竿时鱼竿向后
-    } else if (this.lineState === 'reeling') {
-      this.catAnimation = 'reeling'
-      this.rodAngle = 0.3 // 收竿时鱼竿弯曲
-    } else {
-      this.catAnimation = 'idle'
-      this.rodAngle = 0
-    }
+    // 1. 渲染猫咪（坐在炮台旁边）
+    this.renderCat(ctx, catX - 50, catY)
     
-    // 1. 渲染猫咪
-    this.renderCat(ctx, catX, catY)
-    
-    // 2. 渲染鱼竿（从猫咪手中伸出）
+    // 2. 渲染炮台
     this.renderRod(ctx, catX, catY)
   }
   
@@ -690,145 +678,148 @@ export default class Game {
     ctx.restore()
   }
   
-  // 渲染鱼竿
+  // 渲染炮台
   renderRod(ctx, catX, catY) {
+    const炮台 X = catX
+    const炮台 Y = catY
+    
+    // 炮台根据状态旋转
+    let炮台角度 = -Math.PI / 2 // 默认向上
+    if (this.lineState === 'moving_out') {
+      炮台角度 = -Math.PI / 2 - 0.2 // 抛出时略微向后
+    } else if (this.lineState === 'moving_in') {
+      炮台角度 = -Math.PI / 2 + 0.1 // 收回时向前
+    }
+    
     ctx.save()
-    ctx.translate(catX + 20, catY - 20)
-    ctx.rotate(this.rodAngle)
+    ctx.translate(炮台 X, 炮台 Y)
     
-    // 鱼竿握把（被猫爪握着）
-    const gripGradient = ctx.createLinearGradient(0, 0, 80, 0)
-    gripGradient.addColorStop(0, '#2C2C2C')
-    gripGradient.addColorStop(1, '#1A1A1A')
-    
-    ctx.fillStyle = gripGradient
+    // 1. 炮台底座
+    ctx.fillStyle = '#696969'
     ctx.beginPath()
-    ctx.moveTo(0, -5)
-    ctx.lineTo(80, -8)
-    ctx.lineTo(85, -3)
-    ctx.lineTo(80, 2)
-    ctx.lineTo(0, 5)
-    ctx.closePath()
+    ctx.arc(0, 15, 35, Math.PI, 0)
     ctx.fill()
     
-    // 线轮
-    ctx.fillStyle = '#C0C0C0'
-    ctx.beginPath()
-    ctx.arc(30, 5, 12, 0, Math.PI * 2)
-    ctx.fill()
-    
-    ctx.fillStyle = '#606060'
-    ctx.beginPath()
-    ctx.arc(30, 5, 5, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 摇把
-    ctx.strokeStyle = '#404040'
-    ctx.lineWidth = 3
-    ctx.beginPath()
-    ctx.moveTo(25, 5)
-    ctx.lineTo(40, 5)
-    ctx.stroke()
-    
-    ctx.fillStyle = '#8B4513'
-    ctx.beginPath()
-    ctx.arc(42, 5, 4, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 竿身（碳素材质）
-    const rodGradient = ctx.createLinearGradient(80, 0, 200, -100)
-    rodGradient.addColorStop(0, '#1A1A2E')
-    rodGradient.addColorStop(1, '#0F3460')
-    
-    ctx.strokeStyle = rodGradient
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.moveTo(80, -5)
-    ctx.quadraticCurveTo(140, -40, 200, -100)
-    ctx.stroke()
-    
-    // 竿梢（红色）
-    ctx.strokeStyle = '#E94560'
+    // 底座纹理
+    ctx.strokeStyle = '#505050'
     ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(200, -100)
-    ctx.quadraticCurveTo(220, -115, 230, -125)
-    ctx.stroke()
-    
-    // 导环
-    ctx.strokeStyle = '#C0C0C0'
-    ctx.lineWidth = 2
-    for (let i = 0; i < 3; i++) {
-      const t = (i + 1) / 4
-      const guideX = 80 + (120 * t)
-      const guideY = -5 + (-95 * t)
+    for (let i = 0; i < 5; i++) {
+      const y = 10 + i * 3
       ctx.beginPath()
-      ctx.arc(guideX, guideY, 2, 0, Math.PI * 2)
+      ctx.moveTo(-30, y)
+      ctx.lineTo(30, y)
       ctx.stroke()
     }
     
+    // 2. 旋转基座
+    ctx.save()
+    ctx.rotate(炮台角度 + Math.PI / 2)
+    
+    ctx.fillStyle = '#808080'
+    ctx.beginPath()
+    ctx.rect(-20, -20, 40, 30)
+    ctx.fill()
+    
+    // 基座铆钉
+    ctx.fillStyle = '#C0C0C0'
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath()
+      ctx.arc(-12 + i * 8, -12, 3, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    
+    // 3. 炮管（主炮筒）
+    const炮管 Gradient = ctx.createLinearGradient(0, -40, 0, -120)
+    炮管 Gradient.addColorStop(0, '#708090')
+    炮管 Gradient.addColorStop(0.5, '#607080')
+    炮管 Gradient.addColorStop(1, '#506070')
+    
+    ctx.fillStyle = 炮管 Gradient
+    ctx.beginPath()
+    ctx.rect(-12, -120, 24, 90)
+    ctx.fill()
+    
+    // 炮管高光
+    ctx.fillStyle = 'rgba(255,255,255,0.2)'
+    ctx.beginPath()
+    ctx.rect(-8, -115, 6, 80)
+    ctx.fill()
+    
+    // 炮管箍环
+    ctx.fillStyle = '#405060'
+    ctx.beginPath()
+    ctx.rect(-13, -80, 26, 8)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.rect(-13, -50, 26, 8)
+    ctx.fill()
+    
+    // 4. 炮口
+    ctx.fillStyle = '#304050'
+    ctx.beginPath()
+    ctx.rect(-14, -125, 28, 10)
+    ctx.fill()
+    
+    // 炮口内部（黑色）
+    ctx.fillStyle = '#1a1a1a'
+    ctx.beginPath()
+    ctx.ellipse(0, -125, 10, 4, 0, 0, Math.PI * 2)
+    ctx.fill()
+    
     ctx.restore()
     
-    // 鱼线（从竿梢伸出）
-    const tipX = catX + 230
-    const tipY = catY - 145
+    // 5. 鱼线（从炮口伸出）
+    const tipX = 炮台 X + Math.cos(炮台角度) * 120
+    const tipY = 炮台 Y + Math.sin(炮台角度) * 120
     
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'
-    ctx.lineWidth = 1
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+    ctx.lineWidth = 1.5
     ctx.beginPath()
     ctx.moveTo(tipX, tipY)
     
-    // 鱼线弧度
-    if (this.lineState === 'casting') {
-      // 甩竿时抛物线
+    // 鱼线根据状态显示
+    if (this.lineState === 'moving_out') {
+      // 抛出时鱼线绷紧
+      ctx.lineTo(this.hookX, tipY - this.lineLength)
+    } else if (this.lineState === 'moving_in') {
+      // 收回时鱼线摆动
       ctx.quadraticCurveTo(
-        tipX + 50, tipY - this.lineLength / 3,
-        this.hookX, tipY - this.lineLength
-      )
-    } else if (this.lineState === 'reeling') {
-      // 收竿时绷紧
-      ctx.quadraticCurveTo(
-        this.hookX, tipY - this.lineLength / 2,
+        this.hookX + 20, tipY - this.lineLength / 2,
         this.hookX, tipY - this.lineLength
       )
     } else {
       // 空闲时自然下垂
       ctx.quadraticCurveTo(
-        tipX + 20, tipY - 30,
+        tipX + 10, tipY - 30,
         this.hookX, tipY - 50
       )
     }
     ctx.stroke()
     
-    // 鱼钩和路亚饵
+    // 6. 鱼钩和鱼饵
     const hookY = tipY - this.lineLength
     
     // 鱼钩
     ctx.strokeStyle = '#666'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.arc(this.hookX, hookY, 6, 0, Math.PI, true)
+    ctx.arc(this.hookX, hookY, 7, 0, Math.PI, true)
     ctx.stroke()
     
-    // 路亚饵（红色）
-    ctx.fillStyle = '#FF6B6B'
-    ctx.beginPath()
-    ctx.ellipse(this.hookX, hookY + 10, 7, 4, 0, 0, Math.PI * 2)
-    ctx.fill()
-    
-    // 羽毛（金色）
-    ctx.fillStyle = '#FFD700'
-    ctx.beginPath()
-    ctx.moveTo(this.hookX - 5, hookY + 12)
-    ctx.lineTo(this.hookX, hookY + 20)
-    ctx.lineTo(this.hookX + 5, hookY + 12)
-    ctx.closePath()
-    ctx.fill()
+    // 鱼饵（红色蠕虫）
+    ctx.fillStyle = '#DC143C'
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath()
+      ctx.ellipse(this.hookX, hookY + 12 + i * 5, 5 - i, 3, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
     
     // 钓到的鱼
     if (this.caughtFish) {
-      this.drawFish(this.caughtFish, this.hookX, hookY + 30)
+      this.drawFish(this.caughtFish, this.hookX, hookY + 35)
     }
+    
+    ctx.restore()
   }
   
   // 绘制鱼
