@@ -9,6 +9,8 @@ export default class Main {
   constructor() {
     this.game = null
     this.adManager = null
+    this.canvas = null
+    this.ctx = null
   }
 
   // 启动游戏
@@ -26,19 +28,46 @@ export default class Main {
         version: systemInfo.version
       })
       
-      // 检查 Canvas
-      if (systemInfo.canvas) {
-        console.log('Canvas 可用')
+      // 获取 Canvas - 微信小游戏专用方式
+      this.canvas = wx.getSystemInfoSync().canvas
+      if (!this.canvas) {
+        // 备用方案：尝试创建 Canvas
+        if (typeof wx.createCanvas === 'function') {
+          this.canvas = wx.createCanvas()
+          console.log('已创建 Canvas')
+        } else {
+          // 开发者工具中可能没有 canvas，使用离屏 Canvas
+          console.log('创建离屏 Canvas')
+          this.canvas = {
+            width: systemInfo.windowWidth,
+            height: systemInfo.windowHeight,
+            getContext: () => {
+              // 创建一个 2D 上下文用于模拟
+              const offscreen = document ? document.createElement('canvas') : null
+              if (offscreen) {
+                offscreen.width = systemInfo.windowWidth
+                offscreen.height = systemInfo.windowHeight
+                return offscreen.getContext('2d')
+              }
+              return null
+            }
+          }
+        }
+      }
+      
+      if (this.canvas) {
+        console.log('Canvas 已就绪:', this.canvas.width, this.canvas.height)
+        this.ctx = this.canvas.getContext('2d')
       } else {
-        console.warn('Canvas 不可用')
+        console.error('无法获取 Canvas')
       }
       
       // 初始化广告管理器
       this.adManager = new AdManager()
       this.adManager.init()
       
-      // 初始化游戏
-      this.game = new Game(this.adManager)
+      // 初始化游戏（传入 canvas 和 ctx）
+      this.game = new Game(this.adManager, this.canvas, this.ctx)
       this.game.start()
       
       console.log('=== 游戏启动完成 ===')
@@ -53,31 +82,6 @@ export default class Main {
   
   // 显示错误
   showError(message) {
-    try {
-      const systemInfo = wx.getSystemInfoSync()
-      const canvas = systemInfo.canvas
-      if (!canvas) return
-      
-      const ctx = canvas.getContext('2d')
-      const width = systemInfo.windowWidth
-      const height = systemInfo.windowHeight
-      
-      ctx.fillStyle = '#1a1a2e'
-      ctx.fillRect(0, 0, width, height)
-      
-      ctx.fillStyle = '#ff6b6b'
-      ctx.font = 'bold 32px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText('启动失败', width / 2, height / 3)
-      
-      ctx.fillStyle = '#fff'
-      ctx.font = '20px Arial'
-      ctx.fillText(message || '未知错误', width / 2, height / 2)
-      
-      ctx.font = '16px Arial'
-      ctx.fillText('请查看控制台日志', width / 2, height / 2 + 40)
-    } catch (e) {
-      console.error('显示错误失败:', e)
-    }
+    console.error('显示错误:', message)
   }
 }

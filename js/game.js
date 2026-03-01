@@ -3,33 +3,23 @@
  */
 
 export default class Game {
-  constructor(adManager) {
+  constructor(adManager, canvas, ctx) {
     this.adManager = adManager
+    this.canvas = canvas
+    this.ctx = ctx
     
     // 获取系统信息
     this.systemInfo = wx.getSystemInfoSync()
-    console.log('系统信息:', this.systemInfo)
+    console.log('游戏初始化 - 系统信息:', {
+      windowWidth: this.systemInfo.windowWidth,
+      windowHeight: this.systemInfo.windowHeight
+    })
     
     // 屏幕尺寸
-    this.width = this.systemInfo.windowWidth
-    this.height = this.systemInfo.windowHeight
+    this.width = this.canvas ? this.canvas.width : this.systemInfo.windowWidth
+    this.height = this.canvas ? this.canvas.height : this.systemInfo.windowHeight
     
-    // 获取 Canvas
-    this.canvas = this.systemInfo.canvas
-    if (this.canvas) {
-      this.ctx = this.canvas.getContext('2d')
-      // 设置 Canvas 尺寸
-      if (this.canvas.width !== this.width) {
-        this.canvas.width = this.width
-      }
-      if (this.canvas.height !== this.height) {
-        this.canvas.height = this.height
-      }
-      console.log('Canvas 尺寸:', this.canvas.width, this.canvas.height)
-    } else {
-      console.warn('未找到 Canvas')
-      this.ctx = null
-    }
+    console.log('游戏尺寸:', this.width, this.height)
     
     // 游戏状态
     this.state = 'menu' // menu, playing, paused, gameover
@@ -139,7 +129,7 @@ export default class Game {
       const col = Math.floor((x - this.offsetX) / this.cellSize)
       const row = Math.floor((y - this.offsetY) / this.cellSize)
       
-      console.log('触摸位置:', row, col)
+      console.log('触摸位置:', row, col, '网格:', this.gridSize)
       
       if (row >= 0 && row < this.gridSize && col >= 0 && col < this.gridSize) {
         if (this.selectedCell) {
@@ -278,6 +268,7 @@ export default class Game {
   start() {
     console.log('游戏启动...')
     this.state = 'menu'
+    this.bindEvents()
     this.render()
   }
   
@@ -323,6 +314,8 @@ export default class Game {
   
   // 渲染菜单
   renderMenu() {
+    console.log('渲染菜单...')
+    
     this.ctx.fillStyle = '#fff'
     this.ctx.font = 'bold 48px Arial'
     this.ctx.textAlign = 'center'
@@ -336,6 +329,8 @@ export default class Game {
     this.ctx.fillRect(this.width / 2 - 100, this.height / 2 + 50, 200, 60)
     this.ctx.fillStyle = '#fff'
     this.ctx.fillText('开始游戏', this.width / 2, this.height / 2 + 90)
+    
+    console.log('菜单渲染完成')
   }
   
   // 渲染游戏
